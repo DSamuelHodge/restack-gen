@@ -51,6 +51,7 @@ class TokenType(Enum):
     ARROW = auto()  # → (sequence operator)
     PARALLEL = auto()  # ⇄ (parallel operator)
     CONDITIONAL = auto()  # →? (conditional operator)
+    COMMA = auto()  # , (used in conditional branches)
     LPAREN = auto()  # (
     RPAREN = auto()  # )
     EOF = auto()  # End of input
@@ -133,6 +134,11 @@ def tokenize(expression: str) -> list[Token]:
 
         if char == "⇄":
             tokens.append(Token(TokenType.PARALLEL, "⇄", position))
+            position += 1
+            continue
+
+        if char == ",":
+            tokens.append(Token(TokenType.COMMA, ",", position))
             position += 1
             continue
 
@@ -227,15 +233,50 @@ class Parser:
         Returns:
             Sequence node or single parallel node
         """
-        nodes = [self.parse_parallel()]
+        nodes = [self.parse_conditional()]
 
         while self.current_token.type == TokenType.ARROW:
             self.advance()  # consume →
-            nodes.append(self.parse_parallel())
+            nodes.append(self.parse_conditional())
 
         if len(nodes) == 1:
             return nodes[0]
         return flatten_sequence(Sequence(nodes))
+
+    def parse_conditional(self) -> IRNode:
+        """Parse conditional expressions.
+
+        conditional := parallel ( CONDITIONAL LPAREN expression ( COMMA expression )? RPAREN )*
+
+        Returns:
+            Either a plain parallel node or Conditional node
+        """
+        node = self.parse_parallel()
+
+        while self.current_token.type == TokenType.CONDITIONAL:
+            self.advance()  # consume →?
+
+            # The left side must resolve to a simple resource name used as condition key
+            if not isinstance(node, Resource):
+                raise ParseError(
+                    "Conditional operator requires a condition name before →?",
+                    self.current_token.position,
+                )
+
+            condition_name = node.name
+
+            self.expect(TokenType.LPAREN)
+            true_branch = self.parse_expression()
+            false_branch: IRNode | None = None
+
+            if self.current_token.type == TokenType.COMMA:
+                self.advance()  # consume ,
+                false_branch = self.parse_expression()
+
+            self.expect(TokenType.RPAREN)
+            node = Conditional(condition_name, true_branch, false_branch)
+
+        return node
 
     def parse_parallel(self) -> IRNode:
         """Parse parallel (higher precedence than sequence).
@@ -342,20 +383,27 @@ def get_project_resources() -> dict[str, str]:
         raise RuntimeError(f"Not in a restack-gen project: {e}") from None
 
     src_dir = project_root / "src" / project_name
-    resources = {}
+    resources: dict[str, str] = {}
+
+    def register(name: str, resource_type: str) -> None:
+        """Register a resource name if not already present."""
+        if not name:
+            return
+        resources.setdefault(name, resource_type)
 
     # Scan agents
     agents_dir = src_dir / "agents"
     if agents_dir.exists():
         for file in agents_dir.glob("*.py"):
             if file.name != "__init__.py":
-                # Resource name is the PascalCase class name
-                # We'll extract it by converting module name
                 module_name = file.stem
-                # Convert snake_case to PascalCase and add "Agent" suffix
                 parts = module_name.split("_")
-                class_name = "".join(p.capitalize() for p in parts) + "Agent"
-                resources[class_name] = "agent"
+                base_name = "".join(p.capitalize() for p in parts)
+                class_name = base_name + "Agent"
+                # Support class name, base PascalCase, and snake_case references
+                register(class_name, "agent")
+                register(base_name, "agent")
+                register(module_name, "agent")
 
     # Scan workflows
     workflows_dir = src_dir / "workflows"
@@ -364,8 +412,11 @@ def get_project_resources() -> dict[str, str]:
             if file.name != "__init__.py":
                 module_name = file.stem
                 parts = module_name.split("_")
-                class_name = "".join(p.capitalize() for p in parts) + "Workflow"
-                resources[class_name] = "workflow"
+                base_name = "".join(p.capitalize() for p in parts)
+                class_name = base_name + "Workflow"
+                register(class_name, "workflow")
+                register(base_name, "workflow")
+                register(module_name, "workflow")
 
     # Scan functions
     functions_dir = src_dir / "functions"
@@ -374,7 +425,9 @@ def get_project_resources() -> dict[str, str]:
             if file.name != "__init__.py":
                 # Functions use snake_case names
                 module_name = file.stem
-                resources[module_name] = "function"
+                base_name = "".join(p.capitalize() for p in module_name.split("_"))
+                register(module_name, "function")
+                register(base_name, "function")
 
     return resources
 
