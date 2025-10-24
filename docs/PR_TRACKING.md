@@ -2,6 +2,11 @@
 
 This document tracks all PRs for the restack-gen project, providing a clear overview of implementation status and dependencies.
 
+## Summary
+- **Progress:** 5/11 PRs complete
+- **Tests:** 151 passing (83 existing + 68 new from PR 5)
+- **Coverage:** 75.43%
+
 ## Legend
 - ✅ **Completed** - Merged to main
 - 🚧 **In Progress** - Currently being implemented
@@ -126,9 +131,10 @@ N/A - Infrastructure setup
 
 ---
 
-## PR 5: Operator parser → IR 📋
-**Status:** Planned  
-**Branch:** TBD  
+## PR 5: Operator parser → IR ✅
+**Status:** Completed  
+**Branch:** pr-5-operator-parser  
+**Commit:** bdc43f5  
 **Dependencies:** PR 4 ✅
 
 ### Scope
@@ -137,30 +143,46 @@ N/A - Infrastructure setup
 - Parse operator expressions into validated IR tree
 - Operator support: `→` (sequence), `⇄` (parallel), `→?` (conditional)
 
-### Planned Files
-- `restack_gen/ir.py` - IR node definitions
-  - `Resource` - Reference to agent/workflow/function
+### Key Files
+- `restack_gen/ir.py` (189 lines) - IR node definitions
+  - `Resource` - Reference to agent/workflow/function (supports "unknown" during parsing)
   - `Sequence` - Sequential execution (→)
   - `Parallel` - Concurrent execution (⇄)
   - `Conditional` - Branching logic (→?)
-- `restack_gen/parser.py` - Tokenizer and parser
-  - Tokenizer: splits input into tokens
-  - Parser: recursive descent, builds IR tree
-  - Validator: ensures all resources exist
+  - Flattening utilities for optimization
+- `restack_gen/parser.py` (481 lines) - Tokenizer and parser
+  - Tokenizer: lexical analysis producing 7 token types
+  - Parser: recursive descent with operator precedence
+  - Validator: project-aware resource checking
+  - Error messages with position tracking
 
-### Planned Tests
-- `tests/test_ir.py` - IR node tests
-- `tests/test_parser.py` - Tokenizer and parser tests
-  - Tokenizer tests (whitespace, arrows, names)
-  - Parser tests (each operator type)
-  - Validation tests (undefined resources, syntax errors)
-  - Integration tests (complex expressions)
+### Tests
+- `tests/test_ir.py` (328 lines, 28 tests) - IR node tests
+  - Resource creation and validation (6 tests)
+  - Sequence operations and flattening (4 tests)
+  - Parallel operations and flattening (4 tests)
+  - Conditional branching (5 tests)
+  - Complex tree structures (3 tests)
+- `tests/test_parser.py` (502 lines, 40 tests) - Tokenizer and parser tests
+  - Tokenizer tests (11 tests)
+  - Parser tests for all operators (15 tests)
+  - Resource scanning (2 tests)
+  - Validation tests (5 tests)
+  - Edge cases and complex expressions (7 tests)
+- **Total:** 68 new tests, all passing
 
 ### DoD Criteria
-- [ ] Parser converts operator string to validated IR
-- [ ] Handles precedence (parallel binds tighter than sequence)
-- [ ] Validates all referenced resources exist
-- [ ] Comprehensive error messages for syntax errors
+- ✅ Parser converts operator string to validated IR
+- ✅ Handles precedence (parentheses > parallel > sequence)
+- ✅ Validates all referenced resources exist
+- ✅ Comprehensive error messages for syntax errors
+- ✅ Windows compatibility (tempfile handling fixed)
+- ✅ Code quality verified (ruff + black)
+
+### Coverage
+- `ir.py`: 100%
+- `parser.py`: 98%
+- Overall project: 75.43%
 
 ### Example Input/Output
 ```python
@@ -174,6 +196,14 @@ Sequence([
     Resource("Agent2", "agent")
 ])
 ```
+
+### Issues Resolved
+- Fixed import errors (generator.py vs project.py)
+- Fixed function argument issues (get_project_name parameter)
+- Modified IR to accept "unknown" type during parsing
+- Fixed Windows tempfile permission errors
+- Fixed 62 ruff linting issues
+- Applied black formatting to all files
 
 ---
 
