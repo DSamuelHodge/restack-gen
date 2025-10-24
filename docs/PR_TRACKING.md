@@ -132,9 +132,9 @@ N/A - Infrastructure setup
 ---
 
 ## PR 5: Operator parser → IR ✅
-**Status:** Completed  
-**Branch:** pr-5-operator-parser  
-**Commit:** bdc43f5  
+**Status:** Completed & Merged  
+**Branch:** `pr-5-operator-parser`  
+**Commit:** `bdc43f5` (Merged: `6f5b225`)  
 **Dependencies:** PR 4 ✅
 
 ### Scope
@@ -417,16 +417,16 @@ docs/
 
 ## Summary Statistics
 
-### Completed PRs: 4/11
+### Completed PRs: 5/11
 - ✅ PR 1: Project Initialization
 - ✅ PR 2: Templates & Renderer
 - ✅ PR 3: CLI Core & init command
 - ✅ PR 4: CLI generate commands
+- ✅ PR 5: Operator parser → IR
 
 ### In Progress: 0/11
 
-### Planned: 7/11
-- 📋 PR 5: Operator parser → IR
+### Planned: 6/11
 - 📋 PR 6: IR → Pipeline codegen
 - 📋 PR 7: Pipeline integration
 - 📋 PR 8: doctor command
@@ -435,30 +435,31 @@ docs/
 - 📋 PR 11: Documentation & Release
 
 ### Test Coverage
-- **Total Tests:** 83 (all passing)
-- **Overall Coverage:** 68.76%
+- **Total Tests:** 151 (all passing)
+- **Overall Coverage:** 75.43%
 - **Key Modules:**
   - `generator.py`: 90.42%
   - `ast_service.py`: 74.92%
+  - `ir.py`: New in PR 5
+  - `parser.py`: New in PR 5
 
 ### Lines of Code
-- **Production Code:** ~1,800 lines
-- **Test Code:** ~1,200 lines
+- **Production Code:** ~2,500 lines
+- **Test Code:** ~2,100 lines
 - **Templates:** ~1,500 lines
-- **Total:** ~4,500 lines
+- **Total:** ~6,100 lines
 
 ---
 
 ## Next Steps
 
-**Immediate:** Start PR 5 (Operator parser → IR)
-1. Create `restack_gen/ir.py` with IR node definitions
-2. Create `restack_gen/parser.py` with tokenizer and parser
-3. Add comprehensive tests for parser functionality
-4. Update documentation with operator syntax
+**Immediate:** Start PR 6 (IR → Pipeline codegen)
+1. Create `restack_gen/codegen.py` with IR to Python code generation
+2. Add pipeline generation to `generator.py`
+3. Update CLI with pipeline command
+4. Add comprehensive tests for code generation
 
-**Following:** PR 6 → PR 7 (Pipeline implementation chain)
+**Following:** PR 7 → PR 11 (Complete remaining features)
 
-**Later:** PR 8-9 (Developer experience improvements)
+**Note:** PR 5 merged to main on 2025-10-24
 
-**Final:** PR 10-11 (Release preparation)
