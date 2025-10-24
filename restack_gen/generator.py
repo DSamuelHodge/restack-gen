@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 from restack_gen.ast_service import update_service_file
+from restack_gen.codegen import generate_pipeline_code
 from restack_gen.renderer import render_template
 
 
@@ -393,5 +394,90 @@ def generate_function(
 
     return {
         "function": function_file,
+        "test": test_file,
+    }
+
+
+def generate_pipeline(
+    name: str,
+    operators: str,
+    force: bool = False,
+) -> dict[str, Path]:
+    """Generate a pipeline from operator expression.
+
+    Args:
+        name: Pipeline name (will be converted to PascalCase for class name)
+        operators: Operator expression (e.g., "A → B ⇄ C")
+        force: If True, overwrite existing generated files
+
+    Returns:
+        Dictionary mapping file type to path
+
+    Raises:
+        GenerationError: If generation fails
+    """
+    # Validate name
+    is_valid, error = validate_name(name)
+    if not is_valid:
+        raise GenerationError(f"Invalid pipeline name: {error}")
+
+    # Find project root
+    project_root = find_project_root()
+    if not project_root:
+        raise GenerationError(
+            "Not in a restack-gen project. Run this command from within a project directory."
+        )
+
+    project_name = get_project_name(project_root)
+
+    # Parse and validate operator expression (import locally to avoid circular import)
+    try:
+        from restack_gen.parser import parse_and_validate
+
+        ir = parse_and_validate(operators)
+    except Exception as e:
+        raise GenerationError(f"Failed to parse operator expression: {e}") from e
+
+    # Generate names
+    workflow_name = to_snake_case(name)
+    pipeline_name = to_pascal_case(workflow_name)
+    if not pipeline_name.endswith("Workflow"):
+        pipeline_name += "Workflow"
+
+    # Define file paths
+    workflow_file = project_root / "src" / project_name / "workflows" / f"{workflow_name}_workflow.py"
+    test_file = project_root / "tests" / f"test_{workflow_name}_workflow.py"
+    service_file = project_root / "server" / "service.py"
+
+    # Check if files exist
+    check_file_exists(workflow_file, force)
+    check_file_exists(test_file, force)
+
+    # Generate workflow code using codegen
+    workflow_content = generate_pipeline_code(ir, pipeline_name, project_name)
+    workflow_content = GENERATED_MARKER + "\n" + workflow_content
+
+    # Write workflow file
+    write_file(workflow_file, workflow_content)
+
+    # Generate test file
+    context = {
+        "project_name": project_name,
+        "workflow_name": workflow_name,
+        "class_name": pipeline_name,
+    }
+    test_content = render_template("test_workflow.py.j2", context)
+    write_file(test_file, test_content)
+
+    # Update service.py
+    update_service_file(
+        service_file,
+        "workflow",
+        f"{workflow_name}_workflow",
+        pipeline_name,
+    )
+
+    return {
+        "workflow": workflow_file,
         "test": test_file,
     }

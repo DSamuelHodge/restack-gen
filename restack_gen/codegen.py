@@ -74,9 +74,12 @@ def generate_imports(ir: IRNode, project_name: str) -> list[str]:
     Returns:
         List of import statements needed
     """
-    imports = [
-        "from restack_ai import Workflow, step",
-    ]
+    imports: list[str] = []
+
+    if _requires_asyncio(ir):
+        imports.append("import asyncio")
+
+    imports.append("from restack_ai import Workflow, step")
 
     # Collect all resources
     resources = _collect_resources(ir)
@@ -89,21 +92,22 @@ def generate_imports(ir: IRNode, project_name: str) -> list[str]:
     # Add imports for each type
     if agents:
         for agent in sorted(set(agents)):
-            imports.append(
-                f"from {project_name}.agents.{_to_snake_case(agent)} import {agent}"
-            )
+            module_name = _to_snake_case(agent)
+            activity_name = f"{module_name}_activity"
+            imports.append(f"from agents.{module_name} import {activity_name}")
 
     if workflows:
         for workflow in sorted(set(workflows)):
-            imports.append(
-                f"from {project_name}.workflows.{_to_snake_case(workflow)} import {workflow}"
-            )
+            base_name = _to_snake_case(workflow)
+            module_name = f"{base_name}_workflow"
+            activity_name = f"{base_name}_activity"
+            imports.append(f"from workflows.{module_name} import {activity_name}")
 
     if functions:
         for func in sorted(set(functions)):
-            imports.append(
-                f"from {project_name}.functions.{_to_snake_case(func)} import {func}"
-            )
+            module_name = _to_snake_case(func)
+            activity_name = f"{module_name}_activity"
+            imports.append(f"from functions.{module_name} import {activity_name}")
 
     return imports
 
@@ -121,11 +125,28 @@ def _collect_resources(node: IRNode) -> list[Resource]:
         for child in node.nodes:
             resources.extend(_collect_resources(child))
     elif isinstance(node, Conditional):
-        resources.extend(_collect_resources(node.condition))
         resources.extend(_collect_resources(node.true_branch))
-        resources.extend(_collect_resources(node.false_branch))
+        if node.false_branch is not None:
+            resources.extend(_collect_resources(node.false_branch))
 
     return resources
+
+
+def _requires_asyncio(node: IRNode) -> bool:
+    """Check if generated code needs asyncio imports."""
+    if isinstance(node, Parallel):
+        return True
+
+    if isinstance(node, Sequence):
+        return any(_requires_asyncio(child) for child in node.nodes)
+
+    if isinstance(node, Conditional):
+        if _requires_asyncio(node.true_branch):
+            return True
+        if node.false_branch is not None and _requires_asyncio(node.false_branch):
+            return True
+
+    return False
 
 
 def _generate_node_code(node: IRNode, indent: int = 0, result_var: str = "result") -> str:

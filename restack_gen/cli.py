@@ -13,6 +13,7 @@ from restack_gen.generator import (
     GenerationError,
     generate_agent,
     generate_function,
+    generate_pipeline,
     generate_workflow,
 )
 from restack_gen.project import create_new_project
@@ -97,14 +98,18 @@ def generate(
     ],
     name: Annotated[str, typer.Argument(help="Name of the resource to generate")],
     force: Annotated[bool, typer.Option("--force", help="Overwrite existing files")] = False,
+    operators: Annotated[
+        str | None, typer.Option("--operators", "-o", help="Operator expression for pipeline (e.g., 'A → B ⇄ C')")
+    ] = None,
 ) -> None:
     """
-    Generate a new resource (agent, workflow, or function).
+    Generate a new resource (agent, workflow, function, or pipeline).
 
     Examples:
         restack g agent Researcher
         restack g workflow EmailCampaign
         restack g function send_email
+        restack g pipeline DataPipeline --operators "Fetch → Process ⇄ Store"
     """
     try:
         if resource_type == "agent":
@@ -140,8 +145,21 @@ def generate(
             console.print("  3. Use in workflows or call directly")
 
         elif resource_type == "pipeline":
-            console.print("[red]Pipeline generation coming in PR 6-7[/red]")
-            raise typer.Exit(1)
+            if not operators:
+                console.print("[red]Error:[/red] Pipeline generation requires --operators option")
+                console.print("Example: restack g pipeline DataPipeline --operators \"Fetch → Process\"")
+                raise typer.Exit(1)
+            
+            files = generate_pipeline(name, operators, force=force)
+            console.print(f"[green]✓[/green] Generated pipeline: [bold]{name}[/bold]")
+            console.print(f"  Workflow: {files['workflow']}")
+            console.print(f"  Test: {files['test']}")
+            console.print("\n[bold cyan]Pipeline structure:[/bold cyan]")
+            console.print(f"  Operators: {operators}")
+            console.print("\n[bold cyan]Next steps:[/bold cyan]")
+            console.print("  1. Review generated workflow code")
+            console.print("  2. Ensure all referenced resources exist")
+            console.print("  3. Run tests: make test")
 
         else:
             console.print(f"[red]Error:[/red] Unknown resource type: {resource_type}")

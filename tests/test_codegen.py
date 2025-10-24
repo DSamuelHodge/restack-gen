@@ -100,7 +100,7 @@ class TestGenerateImports:
         imports = generate_imports(ir, "myproject")
 
         assert "from restack_ai import Workflow, step" in imports
-        assert "from myproject.agents.data_collector import DataCollector" in imports
+        assert "from agents.data_collector import data_collector_activity" in imports
 
     def test_multiple_resource_types(self):
         """Test imports for mixed resource types."""
@@ -113,9 +113,9 @@ class TestGenerateImports:
         )
         imports = generate_imports(ir, "myproject")
 
-        assert "from myproject.agents.data_collector import DataCollector" in imports
-        assert "from myproject.workflows.process_workflow import ProcessWorkflow" in imports
-        assert "from myproject.functions.transform_data import transform_data" in imports
+        assert "from agents.data_collector import data_collector_activity" in imports
+        assert "from workflows.process_workflow_workflow import process_workflow_activity" in imports
+        assert "from functions.transform_data import transform_data_activity" in imports
 
     def test_duplicate_resources(self):
         """Test that duplicate resources only generate one import."""
@@ -129,7 +129,7 @@ class TestGenerateImports:
         imports = generate_imports(ir, "myproject")
 
         # Should only have one import for Agent1
-        agent_imports = [imp for imp in imports if "Agent1" in imp]
+        agent_imports = [imp for imp in imports if "agent1_activity" in imp]
         assert len(agent_imports) == 1
 
 
@@ -247,9 +247,9 @@ class TestGeneratePipelineCode:
 
         # Check imports
         assert "from restack_ai import Workflow, step" in code
-        assert "from myproject.agents.fetcher import Fetcher" in code
-        assert "from myproject.agents.processor import Processor" in code
-        assert "from myproject.agents.saver import Saver" in code
+        assert "from agents.fetcher import fetcher_activity" in code
+        assert "from agents.processor import processor_activity" in code
+        assert "from agents.saver import saver_activity" in code
 
         # Check execution
         assert "fetcher_activity" in code

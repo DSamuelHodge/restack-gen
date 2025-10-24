@@ -306,6 +306,7 @@ def update_service_file(
     resource_type: str,
     module_name: str,
     import_name: str,
+    module_prefix: str | None = None,
 ) -> None:
     """Update service.py with new resource.
 
@@ -316,6 +317,7 @@ def update_service_file(
         resource_type: Type of resource ('agent', 'workflow', or 'function')
         module_name: Module name (e.g., 'researcher' for agents/researcher.py)
         import_name: Name to import and register (e.g., 'ResearcherAgent' or 'research')
+        module_prefix: Optional module prefix override for import path
 
     Raises:
         ServiceModificationError: If modification fails
@@ -342,14 +344,17 @@ def update_service_file(
 
     # Build import module path
     if resource_type == "agent":
-        import_module = f"{project_name}.agents.{module_name}"
+        default_prefix = f"{project_name}.agents"
         list_name = "workflows"  # Agents are registered as workflows
     elif resource_type == "workflow":
-        import_module = f"{project_name}.workflows.{module_name}"
+        default_prefix = f"{project_name}.workflows"
         list_name = "workflows"
     else:  # function
-        import_module = f"{project_name}.functions.{module_name}"
+        default_prefix = f"{project_name}.functions"
         list_name = "functions"
+
+    import_prefix = module_prefix if module_prefix is not None else default_prefix
+    import_module = f"{import_prefix}.{module_name}"
 
     # Add import
     source = add_import(source, import_module, [import_name])
