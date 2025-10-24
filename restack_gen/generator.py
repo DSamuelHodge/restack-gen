@@ -438,6 +438,27 @@ def generate_pipeline(
     except Exception as e:
         raise GenerationError(f"Failed to parse operator expression: {e}") from e
 
+    # Validate pipeline structure
+    try:
+        from restack_gen.validator import validate_pipeline
+
+        validation = validate_pipeline(ir, strict=False)
+        
+        if not validation.is_valid:
+            error_details = "\n  - ".join(validation.errors)
+            raise GenerationError(f"Pipeline validation failed:\n  - {error_details}")
+        
+        # Show warnings if any
+        if validation.warnings:
+            import warnings
+            for warning in validation.warnings:
+                warnings.warn(warning, UserWarning, stacklevel=2)
+                
+    except GenerationError:
+        raise
+    except Exception as e:
+        raise GenerationError(f"Failed to validate pipeline: {e}") from e
+
     # Generate names
     workflow_name = to_snake_case(name)
     pipeline_name = to_pascal_case(workflow_name)
