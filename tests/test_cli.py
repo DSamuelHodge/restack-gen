@@ -71,14 +71,17 @@ def test_generate_command() -> None:
 
 
 def test_doctor_command() -> None:
-    """Test doctor command (placeholder)."""
+    """Test doctor command prints results and exits 0 in typical envs."""
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0
-    assert "doctor" in result.stdout.lower()
+    out = result.stdout.lower()
+    assert "running doctor checks" in out
+    assert "overall" in out
 
 
 def test_run_server_command() -> None:
-    """Test run:server command (placeholder)."""
+    """Test run:server command (requires server/service.py)."""
     result = runner.invoke(app, ["run:server"])
-    assert result.exit_code == 0
-    assert "server" in result.stdout.lower()
+    # Will fail because we're not in a project directory with server/service.py
+    assert result.exit_code == 1
+    assert "service.py not found" in result.stdout

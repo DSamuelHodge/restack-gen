@@ -3,7 +3,6 @@
 """Client script to run {{ workflow_name }} workflow."""
 
 import asyncio
-
 from restack_ai import Restack
 
 from {{ project_name }}.workflows.{{ workflow_module }} import {{ workflow_name }}{% if has_input %}, {{ workflow_name }}Input{% endif %}

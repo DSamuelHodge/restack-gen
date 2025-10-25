@@ -17,6 +17,8 @@ from restack_gen.generator import (
     generate_workflow,
 )
 from restack_gen.project import create_new_project
+from restack_gen import doctor as doctor_mod
+from restack_gen import runner as runner_mod
 
 app = typer.Typer(
     name="restack",
@@ -184,8 +186,12 @@ def run_server(
         restack run:server
         restack run:server --config config/prod.yaml
     """
-    console.print(f"[yellow]Starting server with config:[/yellow] [bold]{config}[/bold]")
-    console.print("[red]Not implemented yet - coming in PR 3[/red]")
+    try:
+        console.print(f"[cyan]Starting Restack service...[/cyan]")
+        runner_mod.start_service(config_path=config)
+    except runner_mod.RunnerError as e:
+        console.print(f"[red]Error:[/red] {e}", style="red")
+        raise typer.Exit(code=1) from None
 
 
 @app.command()
@@ -208,7 +214,29 @@ def doctor(
         restack doctor --verbose
     """
     console.print("[yellow]Running doctor checks...[/yellow]")
-    console.print("[red]Not implemented yet - coming in PR 9[/red]")
+    results = doctor_mod.run_all_checks(base_dir=".", verbose=verbose)
+
+    def _badge(status: str) -> str:
+        return {
+            "ok": "[green]✓[/green]",
+            "warn": "[yellow]![/yellow]",
+            "fail": "[red]✗[/red]",
+        }.get(status, "-")
+
+    for r in results:
+        line = f"{_badge(r.status)} [bold]{r.name}[/bold]: {r.message}"
+        console.print(line)
+        if verbose and r.details:
+            console.print(f"    [dim]{r.details}[/dim]")
+
+    summary = doctor_mod.summarize(results)
+    console.print()
+    console.print(
+        f"Overall: [bold]{summary['overall']}[/bold] • ok={summary['ok']} warn={summary['warn']} fail={summary['fail']}"
+    )
+
+    if summary["overall"] == "fail":
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
