@@ -1,0 +1,63 @@
+name: CHANGELOG Sync
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  changelog-sync:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Update CHANGELOG
+      run: |
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        PR_TITLE="${{ github.event.pull_request.title }}"
+        PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+        MERGE_DATE=$(date +"%Y-%m-%d")
+        
+        # Determine category based on PR title prefix
+        CATEGORY="Changed"
+        if [[ "$PR_TITLE" =~ ^feat ]]; then
+          CATEGORY="Added"
+        elif [[ "$PR_TITLE" =~ ^fix ]]; then
+          CATEGORY="Fixed" 
+        elif [[ "$PR_TITLE" =~ ^docs ]]; then
+          CATEGORY="Documentation"
+        elif [[ "$PR_TITLE" =~ ^chore ]]; then
+          CATEGORY="Changed"
+        fi
+        
+        # Add entry to CHANGELOG.md
+        ENTRY="- **PR #${PR_NUMBER}**: ${PR_TITLE} (by @${PR_AUTHOR})"
+        
+        # Create a temporary file with the new entry
+        {
+          echo "# CHANGELOG"
+          echo ""
+          echo "## [Unreleased]"
+          echo ""
+          echo "### ${CATEGORY}"
+          echo "${ENTRY}"
+          echo ""
+          tail -n +4 CHANGELOG.md
+        } > CHANGELOG.tmp
+        
+        mv CHANGELOG.tmp CHANGELOG.md
+        
+        # Commit the changes
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add CHANGELOG.md
+        git commit -m "docs: update CHANGELOG for PR #${PR_NUMBER}"
+        git push
+        
+    - name: Add comment to Jira
+      run: |
+        echo "Would sync CHANGELOG update to Jira for PR #${{ github.event.pull_request.number }}"

@@ -1,0 +1,50 @@
+name: Jira Integration
+
+on:
+  pull_request:
+    types: [opened, closed, synchronize]
+
+jobs:
+  jira-integration:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Create Jira issue for new PR
+      if: github.event.action == 'opened'
+      run: |
+        ISSUE_SUMMARY="[GitHub PR] ${{ github.event.pull_request.title }}"
+        ISSUE_DESCRIPTION="Automated issue created for GitHub PR #${{ github.event.pull_request.number }}\\n\\nPR URL: ${{ github.event.pull_request.html_url }}\\nAuthor: ${{ github.event.pull_request.user.login }}\\nBranch: ${{ github.event.pull_request.head.ref }}"
+        
+        curl -X POST \
+          -H "Authorization: Basic ${{ secrets.JIRA_AUTH_TOKEN_BASE64 }}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"fields\": {
+              \"project\": {
+                \"key\": \"KAN\"
+              },
+              \"summary\": \"${ISSUE_SUMMARY}\",
+              \"description\": \"${ISSUE_DESCRIPTION}\",
+              \"issuetype\": {
+                \"name\": \"Task\"
+              }
+            }
+          }" \
+          "${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue"
+
+    - name: Update Jira issue on PR merge
+      if: github.event.action == 'closed' && github.event.pull_request.merged == true
+      run: |
+        # Find the associated Jira issue (you might want to implement a more sophisticated mapping)
+        echo "PR #${{ github.event.pull_request.number }} has been merged"
+        
+        # For now, we'll add a comment to the most recent issue
+        # In a production setup, you'd want to maintain a mapping between PRs and Jira issues
+        
+        COMMENT_BODY="GitHub PR #${{ github.event.pull_request.number }} has been merged successfully.\\n\\nPR: ${{ github.event.pull_request.html_url }}\\nMerged by: ${{ github.event.pull_request.merged_by.login }}"
+        
+        # This is a simplified approach - in practice you'd want to store the issue key when creating it
+        echo "Would add comment to Jira: ${COMMENT_BODY}"
