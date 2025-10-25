@@ -44,6 +44,7 @@ dev = [
     "mypy>=1.9.0",
     "pre-commit>=3.7.0",
     "types-pyyaml>=6.0.0",
+    "hatchling>=1.21.0",
 ]
 
 [project.scripts]
@@ -57,6 +58,17 @@ Repository = "https://github.com/restackio/restack-gen"
 
 [tool.hatch.build.targets.wheel]
 packages = ["restack_gen"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/restack_gen",
+    "/tests",
+    "/docs",
+    "/examples",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+]
 
 [tool.ruff]
 line-length = 100

@@ -18,6 +18,7 @@ from restack_gen.generator import (
 )
 from restack_gen.project import create_new_project
 from restack_gen import doctor as doctor_mod
+from restack_gen import runner as runner_mod
 
 app = typer.Typer(
     name="restack",
@@ -185,8 +186,12 @@ def run_server(
         restack run:server
         restack run:server --config config/prod.yaml
     """
-    console.print(f"[yellow]Starting server with config:[/yellow] [bold]{config}[/bold]")
-    console.print("[red]Not implemented yet - coming in PR 3[/red]")
+    try:
+        console.print(f"[cyan]Starting Restack service...[/cyan]")
+        runner_mod.start_service(config_path=config)
+    except runner_mod.RunnerError as e:
+        console.print(f"[red]Error:[/red] {e}", style="red")
+        raise typer.Exit(code=1) from None
 
 
 @app.command()

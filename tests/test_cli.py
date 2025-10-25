@@ -80,7 +80,8 @@ def test_doctor_command() -> None:
 
 
 def test_run_server_command() -> None:
-    """Test run:server command (placeholder)."""
+    """Test run:server command (requires server/service.py)."""
     result = runner.invoke(app, ["run:server"])
-    assert result.exit_code == 0
-    assert "server" in result.stdout.lower()
+    # Will fail because we're not in a project directory with server/service.py
+    assert result.exit_code == 1
+    assert "service.py not found" in result.stdout
