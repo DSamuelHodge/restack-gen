@@ -531,10 +531,10 @@ class DataPipelineWorkflow(Workflow):
 
 ---
 
-## PR 11: Documentation & Release 📋
-**Status:** Planned  
-**Branch:** TBD  
-**Dependencies:** PR 10 ⏸️
+## PR 11: Documentation & Release �
+**Status:** In Progress  
+**Branch:** `pr-9-run-command`  
+**Dependencies:** PR 10 ✅
 
 ### Scope
 - Comprehensive documentation

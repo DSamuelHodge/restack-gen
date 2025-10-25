@@ -109,6 +109,12 @@ python client/run_workflow.py
 
 ## 📖 Documentation
 
+- **[⬇️ Installation](docs/installation.md)** - Install/upgrade/uninstall and requirements
+- **[🚀 Quickstart](docs/quickstart.md)** - Create a project and run it locally
+- **[🧰 CLI Reference](docs/cli-reference.md)** - Commands, options, and examples
+- **[🧩 Templates](docs/templates.md)** - Generated code, headers, and customization
+- **[🩺 Troubleshooting](docs/troubleshooting.md)** - Common issues and fixes
+- **[📦 Release Process](docs/RELEASE.md)** - Building, tagging, publishing
 - **[📋 Decisions Log](docs/DECISIONS.md)** - Architecture decisions and rationales
 - **[📝 Product Specs](specs/product_specs.md)** - Detailed feature specifications
 - **[🗺️ Work Plan](specs/plan.md)** - Implementation roadmap
