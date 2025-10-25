@@ -65,8 +65,9 @@ def verify_base64_encoding(jira_env):
         print("❌ Base64 encoding mismatch")
         print(f"Expected: {expected_base64}")
         print(f"Provided: {provided_base64}")
-        print(f"\n💡 To fix this, run:")
-        print(f'echo -n "{auth_string}" | base64')
+        print(f"\n💡 The JIRA_AUTH_TOKEN_BASE64 should be generated from your email and API token:")
+        print(f'   Run: echo -n "{email}:{api_token}" | base64')
+        print(f"   (This combines your email and API token, not a separate credential)")
         return False
 
 def show_github_secrets_setup():
@@ -85,9 +86,22 @@ def show_github_secrets_setup():
         ('JIRA_BASE_URL', jira_env.get('JIRA_SITE', 'https://hodgedomain.atlassian.net'))
     ]
     
+    print("Note: You only need ONE Jira API token. The JIRA_AUTH_TOKEN_BASE64 is generated")
+    print("      from your email and API token combined (email:token) and base64 encoded.")
+    print()
+    
     for name, value in secrets:
         status = "✅" if not value.startswith('YOUR_') else "❌"
         print(f"{status} {name}: {value}")
+    
+    if not jira_env.get('JIRA_API_TOKEN', '').startswith('YOUR_'):
+        email = jira_env.get('JIRA_EMAIL', '')
+        token = jira_env.get('JIRA_API_TOKEN', '')
+        if email and token and not email.startswith('YOUR_'):
+            auth_string = f"{email}:{token}"
+            base64_encoded = base64.b64encode(auth_string.encode()).decode()
+            print(f"\n💡 Your JIRA_AUTH_TOKEN_BASE64 should be: {base64_encoded}")
+            print(f"   (This is base64 encoding of: {email}:YOUR_API_TOKEN)")
 
 if __name__ == "__main__":
     print("=" * 50)
