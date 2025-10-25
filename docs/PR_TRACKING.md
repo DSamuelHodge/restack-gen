@@ -3,9 +3,9 @@
 This document tracks all PRs for the restack-gen project, providing a clear overview of implementation status and dependencies.
 
 ## Summary
-- **Progress:** 7/11 PRs complete
-- **Tests:** 215 passing
-- **Coverage:** 80.44%
+- **Progress:** 8/11 PRs complete
+- **Tests:** 222 passing
+- **Coverage:** 80.26%
 
 ## Legend
 - ✅ **Completed** - Merged to main
@@ -359,40 +359,41 @@ class DataPipelineWorkflow(Workflow):
 
 ---
 
-## PR 8: doctor command 📋
-**Status:** Planned  
-**Branch:** TBD  
+## PR 8: doctor command ✅
+**Status:** Completed  
+**Branch:** pr-8-doctor-command  
 **Dependencies:** None
 
 ### Scope
-- Implement `restack doctor` command
-- Validate project structure
-- Check dependencies
-- Verify imports
-- Provide actionable fixes
+- Implemented `restack doctor` command
+- Validates project structure (library repo or generated app)
+- Checks core dependencies are importable (typer, rich, jinja2)
+- Verifies Python version (default min 3.11)
+- Reports git working tree status when in a repo
+- Provides a concise summary and exits non-zero on failures
 
-### Planned Files
-- `restack_gen/doctor.py` - Health check utilities
-- Update `restack_gen/cli.py` - Add doctor command
+### Key Files
+- `restack_gen/doctor.py` - Health check utilities (structured results, metrics)
+- `restack_gen/cli.py` - Added `doctor` command with color-coded output and summary
+- `tests/test_doctor.py` - Tests for checks, summaries, and structure variants
 
 ### Checks
 1. Project structure (directories, key files)
-2. Dependencies (installed, versions)
-3. Import validation (all resources importable)
-4. Service.py syntax
-5. Template integrity
+2. Dependencies (importability)
+3. Python version (>= 3.11 by default)
+4. Git status (clean/dirty or not a repo)
 
-### Planned Tests
-- `tests/test_doctor.py` - Doctor command tests
-  - Valid project passes all checks
-  - Missing files detected
-  - Import errors detected
-  - Dependency issues detected
+### Tests
+- `tests/test_doctor.py`
+  - Basic run_all_checks returns expected checks
+  - summarize() counts and overall status
+  - Project structure detection for library vs app vs unknown
+  - Missing dependency triggers warning
 
 ### DoD Criteria
-- [ ] Detects common issues
-- [ ] Provides actionable suggestions
-- [ ] Color-coded output (✅ ⚠️ ❌)
+- [x] Detects common issues
+- [x] Provides actionable suggestions
+- [x] Color-coded output (✅ ⚠️ ❌)
 
 ---
 

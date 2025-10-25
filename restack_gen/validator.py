@@ -5,10 +5,15 @@ This module provides validation for pipeline IR structures, including:
 - Cycle detection in workflow graphs
 - Unreachable node detection
 - Resource existence validation
-- Graph analysis utilities
+- Graph analysis utilities and summary stats
+
+Public API:
+- ValidationError: exception type
+- validate_pipeline(root, strict=False) -> ValidationResult
 """
 
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
 from restack_gen.ir import Conditional, IRNode, Parallel, Resource, Sequence
 
@@ -17,6 +22,23 @@ class ValidationError(Exception):
     """Exception raised when pipeline validation fails."""
 
     pass
+
+
+@dataclass
+class ValidationResult:
+    """Result of validating a pipeline IR.
+
+    Attributes:
+        is_valid: True if no errors were found
+        errors: List of validation error messages
+        warnings: List of non-fatal warnings
+        stats: Dictionary of computed graph metrics (depth, resources, etc.)
+    """
+
+    is_valid: bool
+    errors: List[str]
+    warnings: List[str]
+    stats: Dict[str, Any]
 
 
 class PipelineValidator:
@@ -54,12 +76,7 @@ class PipelineValidator:
                 self._collect_resources(node.false_branch)
 
     def validate(self) -> None:
-        """
-        Validate the complete pipeline.
-
-        Raises:
-            ValidationError: If validation fails
-        """
+        """Validate the complete pipeline, raising on the first error."""
         self._check_cycles()
         self._check_unreachable_nodes()
 
@@ -226,7 +243,6 @@ class PipelineValidator:
                 for child in node.nodes:
                     build_deps(child, predecessors)
             elif isinstance(node, Conditional):
-                build_deps(node.true_branch, next_preds)
                 # Both branches depend on predecessors
                 build_deps(node.true_branch, predecessors)
                 if node.false_branch:
@@ -280,17 +296,62 @@ class PipelineValidator:
         return metrics
 
 
-def validate_pipeline(root: IRNode) -> None:
-    """
-    Validate a pipeline IR structure.
+def validate_pipeline(root: IRNode, strict: bool = False) -> ValidationResult:
+    """Validate a pipeline IR structure and return a rich result.
 
-    Convenience function that creates a validator and runs validation.
+    The function aggregates errors and warnings instead of raising by default.
+    In strict mode, warnings are treated as errors (but still returned, not raised).
 
     Args:
         root: Root node of the IR tree
+        strict: When True, warnings will be promoted to errors in the result
 
-    Raises:
-        ValidationError: If validation fails
+    Returns:
+        ValidationResult with validity, errors, warnings, and stats
     """
     validator = PipelineValidator(root)
-    validator.validate()
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # Collect structural errors
+    try:
+        validator._check_cycles()
+    except ValidationError as e:
+        errors.append(str(e))
+
+    try:
+        validator._check_unreachable_nodes()
+    except ValidationError as e:
+        errors.append(str(e))
+
+    # Compute metrics and derive heuristic warnings
+    stats = validator.get_graph_metrics()
+
+    max_depth = stats.get("max_depth", 0)
+    total_resources = stats.get("total_resources", 0)
+    parallel_sections = stats.get("parallel_sections", 0)
+    conditional_branches = stats.get("conditional_branches", 0)
+
+    if max_depth > 5:
+        warnings.append(f"Pipeline depth is high ({max_depth}); consider simplifying nested structures.")
+    if total_resources > 20:
+        warnings.append(f"Pipeline uses many resources ({total_resources}); consider splitting into sub-pipelines.")
+    if parallel_sections > 10:
+        warnings.append(f"Pipeline has many parallel sections ({parallel_sections}); monitor concurrency and resource usage.")
+    if conditional_branches > 10:
+        warnings.append(f"Pipeline has many conditional branches ({conditional_branches}); complexity may be high.")
+
+    # Strict mode: promote warnings to errors in the returned result
+    promoted_errors = list(errors)
+    if strict and warnings:
+        promoted_errors.extend([f"Strict mode: {w}" for w in warnings])
+
+    is_valid = len(promoted_errors) == 0
+
+    return ValidationResult(
+        is_valid=is_valid,
+        errors=promoted_errors,
+        warnings=warnings,
+        stats=stats,
+    )
