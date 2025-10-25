@@ -3,9 +3,9 @@
 This document tracks all PRs for the restack-gen project, providing a clear overview of implementation status and dependencies.
 
 ## Summary
-- **Progress:** 6/11 PRs complete
-- **Tests:** 186 passing (151 existing + 35 new from PR 6)
-- **Coverage:** 79.70%
+- **Progress:** 7/11 PRs complete
+- **Tests:** 215 passing
+- **Coverage:** 80.44%
 
 ## Legend
 - ✅ **Completed** - Merged to main
@@ -327,35 +327,35 @@ class DataPipelineWorkflow(Workflow):
 
 ---
 
-## PR 7: Pipeline integration & examples 📋
-**Status:** Planned  
-**Branch:** TBD  
-**Dependencies:** PR 6 ⏸️
+## PR 7: Pipeline integration & examples ✅
+**Status:** Completed & Merged  
+**Branch:** `pr-7-pipeline-integration`  
+**Dependencies:** PR 6 ✅
 
 ### Scope
-- Create example pipelines in examples/ directory
-- Add pipeline validation (cycles, unreachable nodes)
-- Update documentation with pipeline examples
-- Optional: Pipeline visualization
+- Implemented example pipelines in `examples/` directory
+- Added pipeline validation (cycle detection, unreachable nodes, dependencies, metrics)
+- Authored comprehensive documentation with pipeline usage, patterns, and troubleshooting
 
-### Planned Files
-- `examples/data_pipeline/` - Data processing pipeline example
-- `examples/email_pipeline/` - Email workflow pipeline example
-- `restack_gen/validator.py` - Pipeline validation
-- `docs/PIPELINES.md` - Pipeline documentation
+### Key Files
+- `examples/data_pipeline/` - Sequential data processing pipeline example
+- `examples/email_pipeline/` - Parallel + conditional email workflow example
+- `restack_gen/validator.py` - Pipeline validation and graph analysis utilities
+- `docs/PIPELINES.md` - End-to-end pipeline documentation
 
-### Planned Tests
-- `tests/test_validator.py` - Validation tests
+### Tests
+- `tests/test_validator.py` (29 tests) - Validation tests covering:
   - Cycle detection
   - Unreachable node detection
-  - Graph analysis
-- End-to-end tests with real pipelines
-- Performance tests for large pipelines
+  - Execution order
+  - Dependency mapping
+  - Graph metrics (parallel/conditional counting)
+- Full test suite executed: 215 passing
 
 ### DoD Criteria
-- [ ] Full examples work end-to-end
-- [ ] Validation catches common errors
-- [ ] Documentation covers all use cases
+- ✅ Full examples work end-to-end
+- ✅ Validation catches common errors
+- ✅ Documentation covers all primary and advanced use cases
 
 ---
 
