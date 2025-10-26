@@ -242,6 +242,17 @@ python client/run_workflow.py
 
 ---
 
+## 🧪 Examples
+
+- Research agent (LLM + Tools): `examples/research_agent/`
+  - Offline stubs by default; auto-switches to real router/tools if added
+  - Shows tool invocation + LLM summarization end-to-end
+- Prompted multi-step pipeline: `examples/prompted_pipeline/`
+  - Minimal prompt loader reading `config/prompts.yaml`
+  - Demonstrates prompt versioning + multi-step processing
+
+---
+
 ## 🎨 Operator Grammar Examples
 
 ### Simple sequence

@@ -1,0 +1,5 @@
+prompts:
+  Analyze:
+    latest: "1.0.0"
+    versions:
+      "1.0.0": "prompts/analyze/v1.0.0.md"

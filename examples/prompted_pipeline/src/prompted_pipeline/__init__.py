@@ -1,0 +1,1 @@
+"""Prompted pipeline example package."""
