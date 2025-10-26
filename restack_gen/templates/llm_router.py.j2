@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """LLM Router for multi-provider LLM calls with fallback.
 
 This module provides a unified interface for calling multiple LLM providers
@@ -127,7 +129,10 @@ class LLMConfig(BaseModel):
     fallback: FallbackConfig
 
 # Resolve postponed annotations (from __future__ import annotations) for Pydantic models
+LLMRequest.model_rebuild()
+LLMResponse.model_rebuild()
 Provider.model_rebuild()
+CircuitBreakerConfig.model_rebuild()
 FallbackConfig.model_rebuild()
 RouterConfig.model_rebuild()
 LLMConfig.model_rebuild()
@@ -1029,7 +1034,7 @@ class LLMRouter:
         """Close HTTP client."""
         await self.client.aclose()
     
-    async def __aenter__(self) -> LLMRouter:
+    async def __aenter__(self) -> "LLMRouter":
         """Async context manager entry."""
         return self
     
