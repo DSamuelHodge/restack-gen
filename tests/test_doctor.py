@@ -92,15 +92,17 @@ def test_check_tools_with_config(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     tools_config = config_dir / "tools.yaml"
-    
+
     # Create a minimal valid config
-    tools_config.write_text("""
+    tools_config.write_text(
+        """
 tools:
   - name: test_server
     module: test_module
     enabled: true
-""")
-    
+"""
+    )
+
     res = doctor.check_tools(tmp_path)
     assert res.name == "tools"
     # Should fail because module doesn't exist, but config was parsed
@@ -112,10 +114,10 @@ def test_check_tools_invalid_yaml(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     tools_config = config_dir / "tools.yaml"
-    
+
     # Invalid YAML
     tools_config.write_text("invalid: yaml: content: [unclosed")
-    
+
     res = doctor.check_tools(tmp_path)
     assert res.name == "tools"
     assert res.status == "fail"
@@ -127,14 +129,16 @@ def test_check_tools_verbose(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     tools_config = config_dir / "tools.yaml"
-    
-    tools_config.write_text("""
+
+    tools_config.write_text(
+        """
 tools:
   - name: test_server
     module: test_module
     enabled: true
-""")
-    
+"""
+    )
+
     res = doctor.check_tools(tmp_path, verbose=True)
     assert res.name == "tools"
     # Verbose may include details
@@ -184,10 +188,7 @@ def test_summarize_with_failures() -> None:
 def test_doctor_check_result_creation() -> None:
     """Test creating DoctorCheckResult objects."""
     result = doctor.DoctorCheckResult(
-        name="test_check",
-        status="ok",
-        message="Test message",
-        details="Test details"
+        name="test_check", status="ok", message="Test message", details="Test details"
     )
     assert result.name == "test_check"
     assert result.status == "ok"

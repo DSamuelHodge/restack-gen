@@ -82,5 +82,3 @@ class TestPromptVersioning:
         assert files["prompt"].exists()
         with pytest.raises(GenerationError):
             generate_prompt("Research", version="1.0.0", force=False)
-
-

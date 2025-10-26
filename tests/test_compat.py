@@ -24,9 +24,7 @@ def test_base_model_available() -> None:
 def test_settings_base_available() -> None:
     """Test that SettingsBase is available."""
     assert compat.SettingsBase is not None
-    assert hasattr(compat.SettingsBase, "model_config") or hasattr(
-        compat.SettingsBase, "Config"
-    )
+    assert hasattr(compat.SettingsBase, "model_config") or hasattr(compat.SettingsBase, "Config")
 
 
 def test_field_available() -> None:
@@ -220,5 +218,3 @@ def test_all_exports() -> None:
     for name in expected:
         assert hasattr(compat, name), f"Missing export: {name}"
         assert name in compat.__all__, f"Missing from __all__: {name}"
-
-

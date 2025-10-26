@@ -105,7 +105,11 @@ class TestFastMCPManagerTemplateContent:
 
     def test_handles_missing_config_file(self, manager_content):
         """Test that manager handles missing config files."""
-        assert "FileNotFoundError" in manager_content or "exists()" in manager_content or "is_file()" in manager_content
+        assert (
+            "FileNotFoundError" in manager_content
+            or "exists()" in manager_content
+            or "is_file()" in manager_content
+        )
 
     def test_has_server_config_dataclass(self, manager_content):
         """Test that ServerConfig dataclass is defined."""
@@ -114,7 +118,7 @@ class TestFastMCPManagerTemplateContent:
 
     def test_server_config_has_fields(self, manager_content):
         """Test that ServerConfig has expected fields."""
-        config_section = manager_content[manager_content.find("class ServerConfig"):][:500]
+        config_section = manager_content[manager_content.find("class ServerConfig") :][:500]
         assert "name" in config_section.lower()
 
     def test_handles_yaml_parsing_errors(self, manager_content):
@@ -123,38 +127,38 @@ class TestFastMCPManagerTemplateContent:
 
     def test_handles_empty_servers_list(self, manager_content):
         """Test that manager handles empty servers configuration."""
-        load_section = manager_content[manager_content.find("def _load_config"):][:1000]
+        load_section = manager_content[manager_content.find("def _load_config") :][:1000]
         assert "servers" in load_section.lower()
 
     def test_validates_server_exists_before_start(self, manager_content):
         """Test that start_server validates server exists."""
-        start_section = manager_content[manager_content.find("async def start_server"):][:800]
+        start_section = manager_content[manager_content.find("async def start_server") :][:800]
         assert "if" in start_section or "not in" in start_section or "KeyError" in start_section
 
     def test_checks_server_state_before_stop(self, manager_content):
         """Test that stop_server checks if server is running."""
-        stop_section = manager_content[manager_content.find("async def stop_server"):][:600]
+        stop_section = manager_content[manager_content.find("async def stop_server") :][:600]
         assert "if" in stop_section or "running" in stop_section.lower()
 
     def test_has_health_check_implementation(self, manager_content):
         """Test that health check returns status information."""
-        health_section = manager_content[manager_content.find("async def health_check"):][:800]
+        health_section = manager_content[manager_content.find("async def health_check") :][:800]
         assert "return" in health_section
 
     def test_health_check_all_iterates_servers(self, manager_content):
         """Test that health_check_all processes all servers."""
-        health_all_section = manager_content[manager_content.find("health_check_all"):][:600]
+        health_all_section = manager_content[manager_content.find("health_check_all") :][:600]
         assert "for" in health_all_section or "servers" in health_all_section.lower()
 
     def test_client_has_async_context_manager(self, manager_content):
         """Test that FastMCPClient implements async context manager protocol."""
-        client_section = manager_content[manager_content.find("class FastMCPClient"):]
+        client_section = manager_content[manager_content.find("class FastMCPClient") :]
         assert "async def __aenter__" in client_section
         assert "async def __aexit__" in client_section
 
     def test_client_validates_connection_state(self, manager_content):
         """Test that client methods check connection state."""
-        client_section = manager_content[manager_content.find("class FastMCPClient"):]
+        client_section = manager_content[manager_content.find("class FastMCPClient") :]
         assert "connected" in client_section.lower() or "connection" in client_section.lower()
 
     def test_has_singleton_manager_getter(self, manager_content):
@@ -188,7 +192,11 @@ class TestFastMCPManagerTemplateContent:
     def test_handles_concurrent_operations(self, manager_content):
         """Test that manager can handle concurrent start/stop operations."""
         # Should use asyncio.gather or similar for concurrent ops
-        assert "gather" in manager_content.lower() or "wait" in manager_content.lower() or "task" in manager_content.lower()
+        assert (
+            "gather" in manager_content.lower()
+            or "wait" in manager_content.lower()
+            or "task" in manager_content.lower()
+        )
 
 
 class TestToolServerDoctorIntegration:
@@ -206,5 +214,9 @@ class TestToolServerDoctorIntegration:
     def test_doctor_detects_tool_servers(self, test_project):
         """Test that doctor command detects tool servers."""
         report = check_tools()
-        # Should detect that tool servers are configured
-        assert "1 configured servers" in str(report) or "found 1" in str(report).lower()
+        # Should detect that tool servers are configured (even if they can't be imported in test env)
+        assert (
+            "1 configured servers" in str(report)
+            or "found 1" in str(report).lower()
+            or "1/1 tool servers" in str(report)
+        )

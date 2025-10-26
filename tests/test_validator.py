@@ -1,7 +1,9 @@
 """Tests for pipeline validator."""
 
+import pytest
+
 from restack_gen.ir import Conditional, Parallel, Resource, Sequence
-from restack_gen.validator import PipelineValidator, validate_pipeline
+from restack_gen.validator import PipelineValidator, ValidationError, validate_pipeline
 
 
 class TestValidatorResourceCollection:
@@ -585,9 +587,174 @@ def test_collect_resources_deeply_nested() -> None:
 def test_graph_metrics_with_types() -> None:
     """Test graph metrics includes resource types."""
     node = Sequence(
-        [Resource("Agent1", "agent"), Resource("Workflow1", "workflow"), Resource("Func1", "function")]
+        [
+            Resource("Agent1", "agent"),
+            Resource("Workflow1", "workflow"),
+            Resource("Func1", "function"),
+        ]
     )
     validator = PipelineValidator(node)
     metrics = validator.get_graph_metrics()
     assert metrics["total_resources"] == 3
 
+
+class TestValidationErrorPaths:
+    """Tests for validation error conditions that raise exceptions."""
+
+    def test_unreachable_nodes_error(self):
+        """Test that unreachable nodes trigger ValidationError."""
+        # Create a validator with a resource in all_resources that isn't in the tree
+        # This simulates a parsing error or manual construction issue
+        node = Resource("A", "agent")
+        validator = PipelineValidator(node)
+
+        # Manually add an unreachable resource to simulate error condition
+        validator.all_resources.add("UnreachableAgent")
+
+        with pytest.raises(ValidationError, match="Unreachable nodes detected"):
+            validator._check_unreachable_nodes()
+
+    def test_validate_function_with_depth_warning(self):
+        """Test validation function with pipeline that triggers depth warning."""
+        # Create a deeply nested sequence (depth > 5) - need 6 levels
+        node = Sequence(
+            [
+                Resource("A", "agent"),
+                Sequence(
+                    [
+                        Resource("B", "agent"),
+                        Sequence(
+                            [
+                                Resource("C", "agent"),
+                                Sequence(
+                                    [
+                                        Resource("D", "agent"),
+                                        Sequence(
+                                            [
+                                                Resource("E", "agent"),
+                                                Sequence(
+                                                    [
+                                                        Resource("F", "agent"),
+                                                        Resource("G", "agent"),
+                                                    ]
+                                                ),
+                                            ]
+                                        ),
+                                    ]
+                                ),
+                            ]
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+        result = validate_pipeline(node)
+        assert result.is_valid
+        assert len(result.warnings) > 0
+        assert any("Pipeline depth is high" in w for w in result.warnings)
+        assert result.stats["max_depth"] > 5
+
+    def test_validate_function_with_many_resources_warning(self):
+        """Test validation function with pipeline that has > 20 resources."""
+        # Create a sequence with 21 resources
+        resources = [Resource(f"Agent{i}", "agent") for i in range(21)]
+        node = Sequence(resources)
+
+        result = validate_pipeline(node)
+        assert result.is_valid
+        assert len(result.warnings) > 0
+        assert any("Pipeline uses many resources" in w for w in result.warnings)
+        assert result.stats["total_resources"] == 21
+
+    def test_validate_function_with_many_parallel_sections_warning(self):
+        """Test validation function with > 10 parallel sections."""
+        # Create a sequence with 11 parallel sections
+        parallels = [
+            Parallel([Resource(f"A{i}", "agent"), Resource(f"B{i}", "agent")]) for i in range(11)
+        ]
+        node = Sequence(parallels)
+
+        result = validate_pipeline(node)
+        assert result.is_valid
+        assert len(result.warnings) > 0
+        assert any("Pipeline has many parallel sections" in w for w in result.warnings)
+        assert result.stats["parallel_sections"] == 11
+
+    def test_validate_function_with_many_conditionals_warning(self):
+        """Test validation function with > 10 conditional branches."""
+        # Create a sequence with 11 conditionals
+        conditionals = [
+            Conditional(
+                condition=f"check_{i}",
+                true_branch=Resource(f"T{i}", "agent"),
+                false_branch=Resource(f"F{i}", "agent"),
+            )
+            for i in range(11)
+        ]
+        node = Sequence(conditionals)
+
+        result = validate_pipeline(node)
+        assert result.is_valid
+        assert len(result.warnings) > 0
+        assert any("Pipeline has many conditional branches" in w for w in result.warnings)
+        assert result.stats["conditional_branches"] == 11
+
+    def test_validate_function_strict_mode_promotes_warnings(self):
+        """Test that strict mode promotes warnings to errors."""
+        # Create a pipeline with depth > 5 to trigger warning (need 6 levels)
+        node = Sequence(
+            [
+                Resource("A", "agent"),
+                Sequence(
+                    [
+                        Resource("B", "agent"),
+                        Sequence(
+                            [
+                                Resource("C", "agent"),
+                                Sequence(
+                                    [
+                                        Resource("D", "agent"),
+                                        Sequence(
+                                            [
+                                                Resource("E", "agent"),
+                                                Sequence(
+                                                    [
+                                                        Resource("F", "agent"),
+                                                        Resource("G", "agent"),
+                                                    ]
+                                                ),
+                                            ]
+                                        ),
+                                    ]
+                                ),
+                            ]
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+        # Non-strict mode: warnings don't affect validity
+        result_normal = validate_pipeline(node, strict=False)
+        assert result_normal.is_valid
+        assert len(result_normal.warnings) > 0
+        assert len(result_normal.errors) == 0
+
+        # Strict mode: warnings become errors
+        result_strict = validate_pipeline(node, strict=True)
+        assert not result_strict.is_valid
+        assert len(result_strict.errors) > 0
+        assert any("Strict mode:" in e for e in result_strict.errors)
+
+    def test_validate_function_with_unreachable_nodes_error(self):
+        """Test that unreachable nodes cause validation to fail."""
+        node = Resource("A", "agent")
+        validator = PipelineValidator(node)
+
+        # Manually add unreachable resource
+        validator.all_resources.add("UnreachableAgent")
+
+        # Test the error path directly through the validator
+        with pytest.raises(ValidationError):
+            validator._check_unreachable_nodes()
