@@ -78,6 +78,50 @@ def check_dependencies(packages: Iterable[str] = ("typer", "rich", "jinja2")) ->
     return DoctorCheckResult("dependencies", "ok", "Core dependencies are importable")
 
 
+def check_package_versions() -> DoctorCheckResult:
+    """Check installed package versions against recommended minimums.
+
+    Validates:
+    - restack-ai >= 1.2.3
+    - pydantic >= 2.7.0
+    - httpx >= 0.27.0
+    """
+    import importlib.metadata
+
+    requirements = {
+        "restack-ai": "1.2.3",
+        "pydantic": "2.7.0",
+        "httpx": "0.27.0",
+    }
+
+    issues: list[str] = []
+
+    for pkg_name, min_version in requirements.items():
+        try:
+            installed = importlib.metadata.version(pkg_name)
+            # Simple version comparison (works for semantic versioning)
+            installed_parts = tuple(int(x) for x in installed.split(".")[:3])
+            min_parts = tuple(int(x) for x in min_version.split(".")[:3])
+
+            if installed_parts < min_parts:
+                issues.append(f"{pkg_name} {installed} (recommended >={min_version})")
+        except importlib.metadata.PackageNotFoundError:
+            issues.append(f"{pkg_name} not installed (recommended >={min_version})")
+        except Exception:  # pragma: no cover - version parsing edge cases
+            # Silently skip malformed versions
+            pass
+
+    if issues:
+        return DoctorCheckResult(
+            "package_versions",
+            "warn",
+            "Some packages below recommended versions",
+            details="\n".join(f"  ! {issue}" for issue in issues),
+        )
+
+    return DoctorCheckResult("package_versions", "ok", "All package versions meet recommendations")
+
+
 def check_project_structure(base_dir: str | Path = ".") -> DoctorCheckResult:
     """Validate we're in a restack-gen project root or the library repo.
 
@@ -138,6 +182,94 @@ def check_git_status(base_dir: str | Path = ".") -> DoctorCheckResult:
         )
     except Exception as exc:  # pragma: no cover - environment dependent
         return DoctorCheckResult("git", "warn", "Unable to check git status", details=str(exc))
+
+
+def check_write_permissions(base_dir: str | Path = ".") -> DoctorCheckResult:
+    """Check write permissions for key project directories.
+
+    Validates write access to: src/, server/, client/, tests/
+    """
+    root = Path(base_dir)
+    key_dirs = ["src", "server", "client", "tests"]
+    issues: list[str] = []
+
+    for dir_name in key_dirs:
+        dir_path = root / dir_name
+        # Only check if directory exists
+        if dir_path.exists():
+            if not os.access(dir_path, os.W_OK):
+                issues.append(f"{dir_name}/ (no write access)")
+
+    if issues:
+        return DoctorCheckResult(
+            "write_permissions",
+            "fail",
+            "Write permission denied for some directories",
+            details="\n".join(f"  ✗ {issue}" for issue in issues),
+        )
+
+    return DoctorCheckResult("write_permissions", "ok", "Write access verified for key directories")
+
+
+def check_restack_engine(base_dir: str | Path = ".") -> DoctorCheckResult:
+    """Check Restack engine connectivity.
+
+    Attempts to connect to the Restack engine at the configured URL
+    (default: http://localhost:7700 or from RESTACK_ENGINE_URL env var).
+
+    Returns:
+        ok: Engine is reachable
+        warn: Non-critical connectivity issue
+        fail: Engine unreachable or connection error
+    """
+    # Try to get engine URL from environment or config
+    engine_url = os.environ.get("RESTACK_ENGINE_URL", "http://localhost:7700")
+
+    # Try to load from settings if present
+    try:
+        settings_path = Path(base_dir) / "config" / "settings.yaml"
+        if settings_path.exists():
+            with open(settings_path, encoding="utf-8") as f:
+                settings = yaml.safe_load(f) or {}
+                engine_url = settings.get("restack", {}).get("engine_url", engine_url)
+    except Exception:
+        # Silently fall back to default/env
+        pass
+
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            # Try common health endpoints
+            for path in ["/api/health", "/health", "/"]:
+                try:
+                    resp = client.get(f"{engine_url.rstrip('/')}{path}")
+                    if resp.status_code < 500:
+                        return DoctorCheckResult(
+                            "restack_engine",
+                            "ok",
+                            f"Restack engine reachable at {engine_url}",
+                        )
+                except httpx.RequestError:
+                    continue
+
+            # If all paths fail, return connection error
+            return DoctorCheckResult(
+                "restack_engine",
+                "fail",
+                f"Restack engine not reachable at {engine_url}",
+                details=(
+                    "Fix: Ensure Restack engine is running.\n"
+                    "  Start with: docker run -d -p 7700:7700 ghcr.io/restackio/engine:main\n"
+                    "  Or set RESTACK_ENGINE_URL environment variable."
+                ),
+            )
+
+    except Exception as exc:  # pragma: no cover - network errors
+        return DoctorCheckResult(
+            "restack_engine",
+            "fail",
+            f"Unable to connect to Restack engine at {engine_url}",
+            details=f"Error: {exc}",
+        )
 
 
 def check_tools(base_dir: str | Path = ".", *, verbose: bool = False) -> DoctorCheckResult:
@@ -502,12 +634,18 @@ def run_all_checks(
     """
     checks: list[DoctorCheckResult] = []
 
+    # Core environment checks
     checks.append(check_python_version())
     checks.append(check_dependencies())
+    checks.append(check_package_versions())
     checks.append(check_project_structure(base_dir))
+    checks.append(check_write_permissions(base_dir))
     checks.append(check_git_status(base_dir))
 
-    # LLM and prompts configuration
+    # Restack engine connectivity (critical v1.0 check)
+    checks.append(check_restack_engine(base_dir))
+
+    # V2 configuration checks (LLM, prompts, tools)
     checks.append(check_llm_config(base_dir))
     checks.append(check_kong_gateway(base_dir))
     checks.append(check_prompts(base_dir))

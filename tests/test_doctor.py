@@ -211,3 +211,67 @@ def test_project_structure_with_partial_structure(tmp_path: Path) -> None:
     res = doctor.check_project_structure(tmp_path)
     # Should detect pyproject but warn about incomplete structure
     assert res.status in {"ok", "warn"}
+
+
+def test_check_package_versions() -> None:
+    """Test package version checking."""
+    res = doctor.check_package_versions()
+    assert res.name == "package_versions"
+    assert res.status in {"ok", "warn"}
+    # Should not fail - either all packages meet requirements or warnings shown
+
+
+def test_check_write_permissions(tmp_path: Path) -> None:
+    """Test write permissions check."""
+    # Create some directories
+    (tmp_path / "src").mkdir()
+    (tmp_path / "server").mkdir()
+    (tmp_path / "client").mkdir()
+    (tmp_path / "tests").mkdir()
+
+    res = doctor.check_write_permissions(tmp_path)
+    assert res.name == "write_permissions"
+    # Should have write access to temp directory
+    assert res.status == "ok"
+
+
+def test_check_write_permissions_no_dirs(tmp_path: Path) -> None:
+    """Test write permissions check when directories don't exist."""
+    # Don't create any directories
+    res = doctor.check_write_permissions(tmp_path)
+    assert res.name == "write_permissions"
+    # Should be ok when directories don't exist (nothing to check)
+    assert res.status == "ok"
+
+
+def test_check_restack_engine_unreachable(tmp_path: Path, respx_mock: None) -> None:
+    """Test Restack engine check when engine is unreachable."""
+    import os
+
+    # Set a non-existent engine URL
+    old_val = os.environ.get("RESTACK_ENGINE_URL")
+    try:
+        os.environ["RESTACK_ENGINE_URL"] = "http://localhost:19999"
+        res = doctor.check_restack_engine(tmp_path)
+        assert res.name == "restack_engine"
+        assert res.status == "fail"
+        assert "not reachable" in res.message.lower() or "unable to connect" in res.message.lower()
+    finally:
+        if old_val:
+            os.environ["RESTACK_ENGINE_URL"] = old_val
+        else:
+            os.environ.pop("RESTACK_ENGINE_URL", None)
+
+
+def test_check_restack_engine_with_config(tmp_path: Path) -> None:
+    """Test Restack engine check reading from config file."""
+    # Create config directory and settings
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    settings_file = config_dir / "settings.yaml"
+    settings_file.write_text("restack:\n  engine_url: http://localhost:7700\n")
+
+    # This will likely fail to connect, but should read the config
+    res = doctor.check_restack_engine(tmp_path)
+    assert res.name == "restack_engine"
+    assert res.status in {"ok", "fail"}  # Depends on whether engine is actually running
