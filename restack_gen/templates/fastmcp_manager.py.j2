@@ -335,16 +335,29 @@ class FastMCPClient:
             result = await client.call_tool("web_search", {"query": "AI news"})
     """
     
-    def __init__(self, server_name: str, manager: Optional[FastMCPServerManager] = None):
+    def __init__(
+        self,
+        server_name: str,
+        manager: Optional[FastMCPServerManager] = None,
+        *,
+        cache_enabled: bool = False,
+        cache_ttl_seconds: int = 300,
+        cache_maxsize: int = 256,
+    ):
         """Initialize FastMCP Client
         
         Args:
             server_name: Name of the tool server to connect to
             manager: Server manager instance (optional, will create if not provided)
         """
-        self.server_name = server_name
-        self.manager = manager or FastMCPServerManager()
-        self.server = None
+    self.server_name = server_name
+    self.manager = manager or FastMCPServerManager()
+    self.server = None
+    # Optional response cache
+    self._cache_enabled = cache_enabled
+    self._cache_ttl = max(1, int(cache_ttl_seconds))
+    self._cache_maxsize = max(1, int(cache_maxsize))
+    self._cache: dict[str, tuple[float, Any]] = {}
     
     async def __aenter__(self):
         """Async context manager entry"""
@@ -385,6 +398,24 @@ class FastMCPClient:
             raise RuntimeError(f"Not connected to server '{self.server_name}'")
         
         try:
+            # Serve from cache if enabled and valid
+            cache_key = None
+            if self._cache_enabled:
+                try:
+                    import json as _json
+                    cache_key = f"{tool_name}:{_json.dumps(arguments, sort_keys=True, default=str)}"
+                except Exception:
+                    cache_key = f"{tool_name}:{str(sorted(arguments.items()))}"
+                # Validate TTL
+                if cache_key in self._cache:
+                    ts, cached_val = self._cache[cache_key]
+                    if (asyncio.get_event_loop().time() - ts) <= self._cache_ttl:
+                        logger.info(f"Returning cached result for {self.server_name}.{tool_name}")
+                        return cached_val
+                    else:
+                        # Expired
+                        self._cache.pop(cache_key, None)
+
             # Get the tool function from the server's FastMCP instance
             mcp = self.server.mcp
             tools = mcp.list_tools()
@@ -405,6 +436,16 @@ class FastMCPClient:
             ):
                 result = await tool_fn(**arguments)
                 logger.info(f"Tool call successful: {self.server_name}.{tool_name}")
+                # Store in cache
+                if self._cache_enabled and cache_key is not None:
+                    # Evict oldest if over capacity
+                    if len(self._cache) >= self._cache_maxsize:
+                        try:
+                            oldest_key = min(self._cache.items(), key=lambda kv: kv[1][0])[0]
+                            self._cache.pop(oldest_key, None)
+                        except Exception:
+                            self._cache.clear()
+                    self._cache[cache_key] = (asyncio.get_event_loop().time(), result)
                 return result
         
         except Exception as e:

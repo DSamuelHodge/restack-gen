@@ -8,6 +8,7 @@ from enum import Enum
 {% endif %}
 
 from restack_ai.workflow import workflow, log
+import os
 
 from {{ project_name }}.common.compat import BaseModel
 from {{ project_name }}.common.retries import DEFAULT_RETRY
@@ -99,11 +100,14 @@ class {{ agent_name }}:
 {% endif %}
         )
         # Call LLM
+        # Support dry-run via env RESTACK_LLM_DRY_RUN=1 to estimate token cost without calling provider
+        _dry_run = str(os.getenv("RESTACK_LLM_DRY_RUN", "")).lower() in {"1", "true", "yes"}
         response = await self.llm.chat(LLMRequest(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
+            dry_run=_dry_run,
         ))
-        log.info("LLM response", extra={"response": response.content})
+        log.info("LLM response", extra={"response": response.content, "usage": response.usage, "meta": response.metadata})
 {% endif %}
 {% endif %}
 

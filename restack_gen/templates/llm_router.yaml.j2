@@ -8,6 +8,15 @@ llm:
     timeout: 30
     {% if backend == "kong" %}
     features:
+      pricing:
+        models:
+          # Example pricing (USD per 1K tokens). Update to match your plan.
+          gpt-4o-mini:
+            prompt_per_1k: 0.150
+            completion_per_1k: 0.600
+          claude-3-5-sonnet-20241022:
+            prompt_per_1k: 3.00
+            completion_per_1k: 15.00
       ai_rate_limiting:
         enabled: true
         window: "minute"
@@ -23,6 +32,15 @@ llm:
         filters: ["violence", "hate", "sexual", "self-harm"]
     {% else %}
     features:
+      pricing:
+        models:
+          # Example pricing (USD per 1K tokens). Update to match your plan.
+          gpt-4o-mini:
+            prompt_per_1k: 0.150
+            completion_per_1k: 0.600
+          claude-3-5-sonnet-20241022:
+            prompt_per_1k: 3.00
+            completion_per_1k: 15.00
       ai_rate_limiting:
         enabled: false
         window: "minute"

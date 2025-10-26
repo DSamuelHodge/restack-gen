@@ -47,6 +47,8 @@ class LLMRequest(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 4096
     stream: bool = False
+    # When true, don't call providers; estimate tokens/cost and return
+    dry_run: bool = False
     # Optional metadata for observability/correlation (e.g., run_id, agent_id)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -187,8 +189,23 @@ class LLMRouter:
             p.name: CircuitBreaker(self.config.fallback.circuit_breaker)
             for p in self.providers
         }
+        # Configure a pooled HTTP client (connection pooling enabled)
+        limits = httpx.Limits(
+            max_keepalive_connections=20,
+            max_connections=100,
+            keepalive_expiry=30.0,
+        )
+        # Enable HTTP/2 if h2 package is installed, otherwise use HTTP/1.1
+        try:
+            import h2  # noqa: F401
+            use_http2 = True
+        except ImportError:
+            use_http2 = False
+        
         self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(float(self.config.router.timeout))
+            timeout=httpx.Timeout(float(self.config.router.timeout)),
+            limits=limits,
+            http2=use_http2,
         )
     
     def _load_config(self, config_path: str) -> LLMConfig:
@@ -228,6 +245,23 @@ class LLMRouter:
         Raises:
             LLMError: If all providers fail
         """
+        # Fast path: dry-run mode estimates tokens and (optionally) cost
+        if request.dry_run:
+            primary = self.providers[0] if self.providers else None
+            model = request.model or (primary.model if primary else "unknown")
+            usage = self._estimate_usage(request.messages)
+            metadata = {}
+            cost = self._estimate_cost(model, usage)
+            if cost is not None:
+                metadata["cost_estimate_usd"] = round(cost, 6)
+            return LLMResponse(
+                content="(dry-run) no provider call performed",
+                model=model,
+                usage=usage,
+                provider=primary.name if primary else "dry-run",
+                finish_reason="stop",
+                metadata=metadata,
+            )
         errors = []
         
         for provider in self.providers:
@@ -262,6 +296,45 @@ class LLMRouter:
             provider="all",
             retryable=False,
         )
+
+    def _estimate_usage(self, messages: list[dict[str, str]]) -> dict[str, int]:
+        """Rough token usage estimate from message content.
+
+        Heuristic: ~4 characters per token on average for English text.
+        """
+        total_chars = 0
+        for m in messages:
+            try:
+                total_chars += len(m.get("content", ""))
+            except Exception:
+                continue
+        prompt_tokens = max(1, int(total_chars / 4))
+        usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": 0,
+            "total_tokens": prompt_tokens,
+        }
+        return usage
+
+    def _estimate_cost(self, model: str, usage: dict[str, int]) -> float | None:
+        """Estimate USD cost using pricing config if available.
+
+        Looks for llm.router.features.pricing.models[model] with keys
+        prompt_per_1k and completion_per_1k.
+        """
+        try:
+            features = getattr(self.config.router, "features", {}) or {}
+            pricing = (features.get("pricing") or {}).get("models") or {}
+            model_pricing = pricing.get(model)
+            if not model_pricing:
+                return None
+            prompt_rate = float(model_pricing.get("prompt_per_1k", 0.0))
+            completion_rate = float(model_pricing.get("completion_per_1k", 0.0))
+            prompt_tokens = int(usage.get("prompt_tokens", 0))
+            completion_tokens = int(usage.get("completion_tokens", 0))
+            return (prompt_tokens / 1000.0) * prompt_rate + (completion_tokens / 1000.0) * completion_rate
+        except Exception:
+            return None
     
     async def _call_provider(self, provider: Provider, request: LLMRequest) -> LLMResponse:
         """Call a specific provider via Kong or direct.

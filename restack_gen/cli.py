@@ -275,7 +275,10 @@ def run_server(
     """
     try:
         console.print("[cyan]Starting Restack service...[/cyan]")
-        runner_mod.start_service(config_path=config)
+        with console.status(
+            "Starting service (registering workflows/functions)...", spinner="dots"
+        ):
+            runner_mod.start_service(config_path=config)
     except runner_mod.RunnerError as e:
         console.print(f"[red]Error:[/red] {e}", style="red")
         raise typer.Exit(code=1) from None
@@ -306,7 +309,10 @@ def doctor(
         restack doctor --check-tools
     """
     console.print("[yellow]Running doctor checks...[/yellow]")
-    results = doctor_mod.run_all_checks(base_dir=".", verbose=verbose, check_tools_flag=check_tools)
+    with console.status("Evaluating environment, config, and connectivity...", spinner="earth"):
+        results = doctor_mod.run_all_checks(
+            base_dir=".", verbose=verbose, check_tools_flag=check_tools
+        )
 
     def _badge(status: str) -> str:
         return {

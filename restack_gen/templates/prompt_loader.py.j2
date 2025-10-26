@@ -28,6 +28,7 @@ class PromptLoader:
         self.config_path = Path(config_path)
         self.config = self._load_config(self.config_path)
         self.cache: Dict[str, PromptTemplate] = {}
+        self._mtimes: Dict[str, float] = {}
 
     async def load(self, name: str, version: Optional[str] = None) -> PromptTemplate:
         """Load a prompt by name and optional semver-compatible version.
@@ -46,7 +47,18 @@ class PromptLoader:
         cache_key = f"{name}:{resolved_version}"
 
         if cache_key in self.cache:
-            return self.cache[cache_key]
+            # If underlying file changed on disk, invalidate cache entry
+            versions: Dict[str, str] = prompt_cfg.get("versions", {})
+            file_path = versions.get(resolved_version)
+            if file_path:
+                p = Path(file_path)
+                try:
+                    mtime = p.stat().st_mtime
+                    if self._mtimes.get(cache_key) == mtime:
+                        return self.cache[cache_key]
+                except FileNotFoundError:
+                    # fall through to raise in _load_file
+                    pass
 
         versions: Dict[str, str] = prompt_cfg.get("versions", {})
         file_path = versions.get(resolved_version)
@@ -54,6 +66,11 @@ class PromptLoader:
             raise ValueError(f"Version '{resolved_version}' for prompt '{name}' not mapped to a file")
 
         template = self._load_file(file_path)
+        # Track file mtime for invalidation
+        try:
+            self._mtimes[cache_key] = Path(file_path).stat().st_mtime
+        except FileNotFoundError:
+            self._mtimes.pop(cache_key, None)
         self.cache[cache_key] = template
         return template
 
