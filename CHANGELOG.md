@@ -5,6 +5,92 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2025-01-XX
+
+### Added
+
+#### LLM Router Foundation (PR #1)
+- **Multi-provider LLM routing**: Support for OpenAI and Anthropic providers
+- **CLI command**: `restack g llm-config --backend direct` generates router configuration
+- **Automatic fallback**: Routes to next provider on timeout, 5xx, or rate limit
+- **Circuit breaker**: Prevents cascading failures with 5-failure threshold and 60s cooldown
+- **Environment variable substitution**: Config supports `${VAR}` and `${VAR:-default}` syntax
+- **Structured logging**: Uses structlog for comprehensive request/response logging
+- **Complete test coverage**: 9 new tests for config generation and router functionality
+
+#### New Dependencies
+- `httpx>=0.27.0` - Async HTTP client for provider calls
+- `structlog>=24.1.0` - Structured logging support
+- `respx>=0.21.0` - HTTP mocking for tests (dev dependency)
+
+#### New Files
+- `restack_gen/templates/llm_router.yaml.j2` - Configuration template
+- `restack_gen/templates/llm_router.py.j2` - Router implementation template
+- `tests/test_llm_router.py` - Comprehensive test suite
+- `docs/llm-router.md` - Complete documentation and usage guide
+
+### Changed
+- Version bumped to 2.0.0
+- Updated README with v2.0 features
+- Enhanced PROJECT_STATUS.md with PR tracking
+
+### Coming Soon (v2.0 Roadmap)
+- **PR #3**: FastMCP tool server scaffolding
+- **PR #4**: Auto-registration of tools in agents
+- **PR #5**: Prompt versioning system
+- **PR #6-12**: Advanced features (caching, streaming, batch processing, etc.)
+
+#### Kong AI Gateway Integration (PR #2)
+- **Kong backend support**: Route LLM requests through Kong AI Gateway
+- **AI rate limiting**: Token-based rate limiting with configurable thresholds
+- **Cost tracking**: Automatic token usage and cost metrics in response metadata
+- **Content safety**: Optional Azure content filters integration
+- **Gateway-level features**: Latency tracking, rate limit monitoring
+- **Enhanced metadata**: Response includes `latency_ms`, `cost_usd`, `rate_limit_remaining`
+- **Kong-specific tests**: 8 new tests for Kong routing, rate limiting, and cost tracking
+
+#### FastMCP Tool Server Scaffolding (PR #3)
+- **Tool server generation**: `restack g tool-server Research` creates FastMCP tool server
+- **Sample tools included**: web_search, extract_urls, calculate tools in generated servers
+- **YAML configuration**: Automatic `config/tools.yaml` generation with server settings
+- **Health checks**: Built-in health check methods for monitoring server status
+- **Transport support**: stdio (local) and sse (HTTP) transport protocols
+- **Multiple servers**: Support for multiple tool servers in single project
+- **Complete test suite**: 14 tests covering generation, content, name conversion, errors
+
+#### New Files (PR #3)
+- `restack_gen/templates/tool_server.py.j2` - FastMCP tool server template
+- `restack_gen/templates/tools.yaml.j2` - Tool server configuration template
+- `tests/test_tool_server.py` - Test suite for tool server generation
+- `docs/fastmcp-tools.md` - Comprehensive FastMCP tool server guide
+
+#### FastMCP Server Manager (PR #4)
+- **Lifecycle management**: FastMCPServerManager class manages all tool servers
+- **Autostart support**: Tool servers start automatically with Restack service when `autostart: true`
+- **Tool calling API**: FastMCPClient provides clean interface for agents to call tools
+- **Health monitoring**: `restack doctor --check-tools` validates server health and configuration
+- **Server registry**: Track running servers, start/stop individual or all servers
+- **Graceful shutdown**: Automatic cleanup when Restack service stops
+- **Error handling**: Robust error handling for startup failures and unhealthy servers
+- **Complete test suite**: 18 tests covering manager, autostart, health checks, doctor integration
+
+#### New Files (PR #4)
+- `restack_gen/templates/fastmcp_manager.py.j2` - Server manager and client (460 lines)
+- `tests/test_fastmcp_manager.py` - Comprehensive test suite (18 tests)
+
+#### Updated Files (PR #4)
+- `restack_gen/templates/service.py.j2` - Integrated tool server autostart
+- `restack_gen/doctor.py` - Added check_tools() function (145 lines)
+- `restack_gen/cli.py` - Added --check-tools flag to doctor command
+- `restack_gen/generator.py` - Automatic manager generation on first tool server
+- `docs/fastmcp-tools.md` - Added 350+ lines covering manager usage, autostart, tool calling, health monitoring
+
+#### New Features
+- `restack g llm-config --backend kong` generates Kong-ready configuration
+- Automatic feature enablement when Kong backend selected
+- Support for Kong routes: `/ai/openai` and `/ai/anthropic`
+- Content safety filter detection and error handling
+
 ## [1.0.0] - 2025-10-24
 
 ### Added

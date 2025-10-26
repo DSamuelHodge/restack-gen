@@ -502,3 +502,180 @@ def generate_pipeline(
         "workflow": workflow_file,
         "test": test_file,
     }
+
+
+def generate_llm_config(
+    force: bool = False,
+    backend: str = "direct",
+) -> dict[str, Path]:
+    """Generate LLM router configuration files.
+
+    Args:
+        force: If True, overwrite existing files
+        backend: Backend type ("direct" or "kong")
+
+    Returns:
+        Dictionary mapping file type to path
+
+    Raises:
+        GenerationError: If generation fails
+    """
+    # Find project root
+    project_root = find_project_root()
+    if not project_root:
+        raise GenerationError(
+            "Not in a restack-gen project. Run this command from within a project directory."
+        )
+
+    project_name = get_project_name(project_root)
+
+    # Define file paths
+    config_dir = project_root / "config"
+    config_file = config_dir / "llm_router.yaml"
+    common_dir = project_root / "src" / project_name / "common"
+    llm_router_file = common_dir / "llm_router.py"
+
+    # Check if files exist
+    if config_file.exists() and not force:
+        raise GenerationError(
+            f"Config file {config_file} already exists. Use --force to overwrite."
+        )
+    
+    if llm_router_file.exists() and not force:
+        raise GenerationError(
+            f"File {llm_router_file} already exists. Use --force to overwrite."
+        )
+
+    # Prepare context
+    context = {
+        "backend": backend,
+    }
+
+    # Generate config file
+    config_content = render_template("llm_router.yaml.j2", context)
+    write_file(config_file, config_content)
+
+    # Generate LLM router module
+    router_content = render_template("llm_router.py.j2", context)
+    write_file(llm_router_file, router_content)
+
+    # Create __init__.py in common if it doesn't exist
+    init_file = common_dir / "__init__.py"
+    if not init_file.exists():
+        write_file(init_file, '"""Common utilities and shared components."""\n')
+
+    return {
+        "config": config_file,
+        "router": llm_router_file,
+    }
+
+
+def generate_tool_server(
+    name: str,
+    force: bool = False,
+) -> dict[str, Path]:
+    """Generate a FastMCP tool server with configuration.
+
+    Args:
+        name: Tool server name (will be converted to PascalCase for class name)
+        force: If True, overwrite existing generated files
+
+    Returns:
+        Dictionary mapping file type to path ('config', 'server')
+
+    Raises:
+        GenerationError: If generation fails
+    """
+    # Validate name
+    is_valid, error = validate_name(name)
+    if not is_valid:
+        raise GenerationError(f"Invalid tool server name: {error}")
+
+    # Find project root
+    project_root = find_project_root()
+    if not project_root:
+        raise GenerationError(
+            "Not in a restack-gen project. Run this command from within a project directory."
+        )
+
+    project_name = get_project_name(project_root)
+
+    # Convert name formats
+    if "_" in name:
+        # snake_case input
+        class_name = to_pascal_case(name)
+        module_name = name
+    else:
+        # Assume PascalCase input
+        class_name = name
+        module_name = to_snake_case(name)
+
+    # Generate server name (lowercase, underscores)
+    server_name = f"{module_name}_tools"
+
+    # Define file paths
+    config_dir = project_root / "config"
+    config_file = config_dir / "tools.yaml"
+    tools_dir = project_root / "src" / project_name / "tools"
+    server_file = tools_dir / f"{module_name}_mcp.py"
+    tools_init = tools_dir / "__init__.py"
+    common_dir = project_root / "src" / project_name / "common"
+    manager_file = common_dir / "fastmcp_manager.py"
+
+    # Check if files exist
+    if server_file.exists() and not force:
+        raise GenerationError(
+            f"Tool server {server_file} already exists. Use --force to overwrite."
+        )
+
+    # Prepare context
+    import datetime
+    context = {
+        "name": class_name,
+        "project_name": project_name,
+        "module_name": module_name,
+        "module_file_name": f"{module_name}_mcp",  # For import paths in config
+        "server_name": server_name,
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    # Generate tool server file
+    server_content = render_template("tool_server.py.j2", context)
+    write_file(server_file, server_content)
+
+    # Generate or update config file
+    if config_file.exists() and not force:
+        # Config exists, don't overwrite
+        print(f"Config file {config_file} already exists. Skipping config generation.")
+        print(f"Add this server manually to your tools.yaml configuration.")
+    else:
+        config_content = render_template("tools.yaml.j2", context)
+        write_file(config_file, config_content)
+
+    # Create __init__.py in tools directory if it doesn't exist
+    if not tools_init.exists():
+        write_file(tools_init, '"""FastMCP tool servers for agent capabilities."""\n')
+
+    # Generate FastMCP manager if this is the first tool server
+    manager_generated = False
+    if not manager_file.exists():
+        try:
+            from importlib.metadata import version
+            gen_version = version("restack-gen")
+        except Exception:
+            gen_version = "unknown"
+        
+        manager_context = {
+            "version": gen_version,
+            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        manager_content = render_template("fastmcp_manager.py.j2", manager_context)
+        write_file(manager_file, manager_content)
+        print(f"Generated FastMCP manager: {manager_file}")
+        manager_generated = True
+
+    return {
+        "config": config_file if not config_file.exists() or force else None,
+        "server": server_file,
+        "manager": manager_file if manager_generated else None,
+    }

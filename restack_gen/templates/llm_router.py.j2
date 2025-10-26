@@ -1,0 +1,595 @@
+"""LLM Router for multi-provider LLM calls with fallback.
+
+This module provides a unified interface for calling multiple LLM providers
+with automatic fallback and circuit breaker patterns.
+"""
+
+from __future__ import annotations
+
+import os
+import time
+from enum import Enum
+from pathlib import Path
+from typing import Any, Literal
+
+import httpx
+import yaml
+from pydantic import BaseModel, Field
+
+
+class LLMProviderType(str, Enum):
+    """Supported LLM provider types."""
+    
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+
+
+class LLMRequest(BaseModel):
+    """Request to the LLM router."""
+    
+    messages: list[dict[str, str]]
+    model: str | None = None  # Override default
+    temperature: float = 0.7
+    max_tokens: int = 4096
+    stream: bool = False
+
+
+class LLMResponse(BaseModel):
+    """Response from the LLM router."""
+    
+    content: str
+    model: str
+    usage: dict[str, int]
+    provider: str
+    finish_reason: str = "stop"
+    metadata: dict[str, Any] = Field(default_factory=dict)  # Kong metrics, etc.
+
+
+class FallbackCondition(str, Enum):
+    """Conditions that trigger fallback to next provider."""
+    
+    TIMEOUT = "timeout"
+    STATUS_5XX = "5xx"
+    RATE_LIMIT = "rate_limit"
+    MALFORMED_RESPONSE = "malformed_response"
+    LLM_ERROR = "llm_error"
+
+
+class LLMError(Exception):
+    """Base exception for LLM router errors."""
+    
+    def __init__(self, message: str, provider: str, retryable: bool = True):
+        super().__init__(message)
+        self.provider = provider
+        self.retryable = retryable
+
+
+class Provider(BaseModel):
+    """LLM provider configuration."""
+    
+    name: str
+    type: LLMProviderType
+    model: str
+    base_url: str
+    api_key: str
+    priority: int = 1
+
+
+class CircuitBreakerConfig(BaseModel):
+    """Circuit breaker configuration."""
+    
+    enabled: bool = True
+    failure_threshold: int = 5
+    cooldown_seconds: int = 60
+
+
+class FallbackConfig(BaseModel):
+    """Fallback configuration."""
+    
+    conditions: list[str]
+    max_retries_per_provider: int = 2
+    circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig)
+
+
+class RouterConfig(BaseModel):
+    """Router configuration."""
+    
+    backend: Literal["direct", "kong"] = "direct"
+    url: str = "http://localhost:8000"
+    timeout: int = 30
+    features: dict[str, Any] = Field(default_factory=dict)
+
+
+class LLMConfig(BaseModel):
+    """Complete LLM configuration."""
+    
+    router: RouterConfig
+    providers: list[Provider]
+    fallback: FallbackConfig
+
+
+class CircuitBreaker:
+    """Circuit breaker for provider calls."""
+    
+    def __init__(self, config: CircuitBreakerConfig):
+        self.config = config
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+        self.is_open = False
+    
+    def record_success(self) -> None:
+        """Record successful call."""
+        self.failure_count = 0
+        self.is_open = False
+    
+    def record_failure(self) -> None:
+        """Record failed call."""
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        
+        if self.failure_count >= self.config.failure_threshold:
+            self.is_open = True
+    
+    def can_attempt(self) -> bool:
+        """Check if circuit allows attempts."""
+        if not self.config.enabled:
+            return True
+        
+        if not self.is_open:
+            return True
+        
+        # Check cooldown
+        elapsed = time.time() - self.last_failure_time
+        if elapsed >= self.config.cooldown_seconds:
+            # Half-open state: allow one attempt
+            self.is_open = False
+            self.failure_count = 0
+            return True
+        
+        return False
+
+
+class LLMRouter:
+    """Multi-provider LLM router with fallback and circuit breaker."""
+    
+    def __init__(self, config_path: str = "config/llm_router.yaml"):
+        """Initialize router with configuration.
+        
+        Args:
+            config_path: Path to YAML configuration file
+        """
+        self.config = self._load_config(config_path)
+        self.providers = sorted(self.config.providers, key=lambda p: p.priority)
+        self.circuit_breakers: dict[str, CircuitBreaker] = {
+            p.name: CircuitBreaker(self.config.fallback.circuit_breaker)
+            for p in self.providers
+        }
+        self.client = httpx.AsyncClient(
+            timeout=httpx.Timeout(float(self.config.router.timeout))
+        )
+    
+    def _load_config(self, config_path: str) -> LLMConfig:
+        """Load configuration from YAML file with environment variable substitution."""
+        path = Path(config_path)
+        
+        if not path.exists():
+            raise FileNotFoundError(f"Config file not found: {config_path}")
+        
+        # Load YAML
+        with path.open() as f:
+            raw_data = yaml.safe_load(f)
+        
+        # Substitute environment variables
+        config_str = yaml.dump(raw_data)
+        {% raw %}for key, value in os.environ.items():
+            config_str = config_str.replace(f"${{{key}}}", value)
+            # Handle ${VAR:-default} syntax
+            import re
+            pattern = rf"\${{{key}:-([^}}]+)}}"
+            config_str = re.sub(pattern, value if value else r"\1", config_str){% endraw %}
+        
+        data = yaml.safe_load(config_str)
+        return LLMConfig(**data["llm"])
+    
+    async def chat(self, request: LLMRequest) -> LLMResponse:
+        """Route LLM request with fallback logic.
+        
+        Args:
+            request: LLM request
+            
+        Returns:
+            LLM response
+            
+        Raises:
+            LLMError: If all providers fail
+        """
+        errors = []
+        
+        for provider in self.providers:
+            breaker = self.circuit_breakers[provider.name]
+            
+            if not breaker.can_attempt():
+                errors.append(f"{provider.name}: circuit breaker open")
+                continue
+            
+            for attempt in range(self.config.fallback.max_retries_per_provider):
+                try:
+                    response = await self._call_provider(provider, request)
+                    breaker.record_success()
+                    return response
+                
+                except Exception as e:
+                    error_msg = f"{provider.name} (attempt {attempt + 1}): {e}"
+                    errors.append(error_msg)
+                    
+                    if not self._should_fallback(e):
+                        breaker.record_failure()
+                        raise LLMError(str(e), provider.name, retryable=False)
+                    
+                    # Last attempt for this provider
+                    if attempt == self.config.fallback.max_retries_per_provider - 1:
+                        breaker.record_failure()
+        
+        # All providers exhausted
+        error_summary = "; ".join(errors)
+        raise LLMError(
+            f"All providers failed: {error_summary}",
+            provider="all",
+            retryable=False,
+        )
+    
+    async def _call_provider(self, provider: Provider, request: LLMRequest) -> LLMResponse:
+        """Call a specific provider via Kong or direct.
+        
+        Args:
+            provider: Provider configuration
+            request: LLM request
+            
+        Returns:
+            LLM response
+        """
+        if self.config.router.backend == "kong":
+            return await self._call_kong(provider, request)
+        
+        # Direct provider call
+        if provider.type == LLMProviderType.OPENAI:
+            return await self._call_openai(provider, request)
+        elif provider.type == LLMProviderType.ANTHROPIC:
+            return await self._call_anthropic(provider, request)
+        else:
+            raise ValueError(f"Unsupported provider type: {provider.type}")
+    
+    async def _call_openai(self, provider: Provider, request: LLMRequest) -> LLMResponse:
+        """Call OpenAI-compatible API."""
+        model = request.model or provider.model
+        
+        response = await self.client.post(
+            f"{provider.base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {provider.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": request.messages,
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+                "stream": request.stream,
+            },
+        )
+        
+        # Check for errors
+        if response.status_code >= 500:
+            raise LLMError(
+                f"Provider error: {response.status_code}",
+                provider.name,
+                retryable=True,
+            )
+        
+        if response.status_code == 429:
+            raise LLMError(
+                "Rate limit exceeded",
+                provider.name,
+                retryable=True,
+            )
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Validate response structure
+        if "choices" not in data or not data["choices"]:
+            raise LLMError(
+                "Malformed response: missing choices",
+                provider.name,
+                retryable=True,
+            )
+        
+        choice = data["choices"][0]
+        message = choice.get("message", {})
+        content = message.get("content", "")
+        
+        return LLMResponse(
+            content=content,
+            model=data.get("model", model),
+            usage=data.get("usage", {}),
+            provider=provider.name,
+            finish_reason=choice.get("finish_reason", "stop"),
+        )
+    
+    async def _call_anthropic(self, provider: Provider, request: LLMRequest) -> LLMResponse:
+        """Call Anthropic API."""
+        model = request.model or provider.model
+        
+        # Convert messages to Anthropic format
+        system_message = None
+        messages = []
+        
+        for msg in request.messages:
+            if msg["role"] == "system":
+                system_message = msg["content"]
+            else:
+                messages.append(msg)
+        
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+        }
+        
+        if system_message:
+            body["system"] = system_message
+        
+        response = await self.client.post(
+            f"{provider.base_url}/v1/messages",
+            headers={
+                "x-api-key": provider.api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json=body,
+        )
+        
+        # Check for errors
+        if response.status_code >= 500:
+            raise LLMError(
+                f"Provider error: {response.status_code}",
+                provider.name,
+                retryable=True,
+            )
+        
+        if response.status_code == 429:
+            raise LLMError(
+                "Rate limit exceeded",
+                provider.name,
+                retryable=True,
+            )
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Validate response structure
+        if "content" not in data or not data["content"]:
+            raise LLMError(
+                "Malformed response: missing content",
+                provider.name,
+                retryable=True,
+            )
+        
+        content_block = data["content"][0]
+        content = content_block.get("text", "")
+        
+        usage_data = data.get("usage", {})
+        usage = {
+            "prompt_tokens": usage_data.get("input_tokens", 0),
+            "completion_tokens": usage_data.get("output_tokens", 0),
+            "total_tokens": (
+                usage_data.get("input_tokens", 0) + usage_data.get("output_tokens", 0)
+            ),
+        }
+        
+        return LLMResponse(
+            content=content,
+            model=data.get("model", model),
+            usage=usage,
+            provider=provider.name,
+            finish_reason=data.get("stop_reason", "stop"),
+        )
+    
+    async def _call_kong(self, provider: Provider, request: LLMRequest) -> LLMResponse:
+        """Call provider via Kong AI Gateway.
+        
+        Kong routes requests to configured providers and handles rate limiting,
+        cost tracking, and content safety features.
+        
+        Args:
+            provider: Provider configuration
+            request: LLM request
+            
+        Returns:
+            LLM response with Kong metadata
+            
+        Raises:
+            LLMError: On Kong or provider errors
+        """
+        model = request.model or provider.model
+        
+        # Determine Kong route based on provider type
+        if provider.type == LLMProviderType.OPENAI:
+            kong_route = "/ai/openai"
+            request_body = {
+                "model": model,
+                "messages": request.messages,
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+                "stream": request.stream,
+            }
+        elif provider.type == LLMProviderType.ANTHROPIC:
+            kong_route = "/ai/anthropic"
+            
+            # Convert messages to Anthropic format
+            system_message = None
+            messages = []
+            
+            for msg in request.messages:
+                if msg["role"] == "system":
+                    system_message = msg["content"]
+                else:
+                    messages.append(msg)
+            
+            request_body: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "max_tokens": request.max_tokens,
+                "temperature": request.temperature,
+            }
+            
+            if system_message:
+                request_body["system"] = system_message
+        else:
+            raise ValueError(f"Unsupported provider type for Kong: {provider.type}")
+        
+        # Build Kong headers
+        headers = {
+            "Content-Type": "application/json",
+            "X-Kong-Provider": provider.name,  # For routing to specific provider
+        }
+        
+        # Add API key for provider authentication via Kong
+        if provider.type == LLMProviderType.OPENAI:
+            headers["Authorization"] = f"Bearer {provider.api_key}"
+        elif provider.type == LLMProviderType.ANTHROPIC:
+            headers["x-api-key"] = provider.api_key
+            headers["anthropic-version"] = "2023-06-01"
+        
+        # Call Kong gateway
+        kong_url = f"{self.config.router.url}{kong_route}"
+        
+        try:
+            response = await self.client.post(
+                kong_url,
+                headers=headers,
+                json=request_body,
+                timeout=self.config.router.timeout,
+            )
+        except httpx.TimeoutException as e:
+            raise LLMError(
+                f"Kong gateway timeout: {e}",
+                provider.name,
+                retryable=True,
+            )
+        
+        # Check for Kong-specific errors
+        if response.status_code >= 500:
+            raise LLMError(
+                f"Kong gateway error: {response.status_code}",
+                provider.name,
+                retryable=True,
+            )
+        
+        if response.status_code == 429:
+            # Kong rate limiting triggered
+            rate_limit_info = response.headers.get("X-RateLimit-Remaining", "unknown")
+            raise LLMError(
+                f"Rate limit exceeded (remaining: {rate_limit_info})",
+                provider.name,
+                retryable=True,
+            )
+        
+        if response.status_code == 400:
+            # Check for content safety filter
+            error_data = response.json()
+            if "content_safety" in error_data.get("type", ""):
+                raise LLMError(
+                    f"Content safety filter triggered: {error_data.get('message')}",
+                    provider.name,
+                    retryable=False,
+                )
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # Parse response based on provider type
+        if provider.type == LLMProviderType.OPENAI:
+            if "choices" not in data or not data["choices"]:
+                raise LLMError(
+                    "Malformed response: missing choices",
+                    provider.name,
+                    retryable=True,
+                )
+            
+            choice = data["choices"][0]
+            message = choice.get("message", {})
+            content = message.get("content", "")
+            usage = data.get("usage", {})
+            finish_reason = choice.get("finish_reason", "stop")
+            
+        elif provider.type == LLMProviderType.ANTHROPIC:
+            if "content" not in data or not data["content"]:
+                raise LLMError(
+                    "Malformed response: missing content",
+                    provider.name,
+                    retryable=True,
+                )
+            
+            content_block = data["content"][0]
+            content = content_block.get("text", "")
+            
+            usage_data = data.get("usage", {})
+            usage = {
+                "prompt_tokens": usage_data.get("input_tokens", 0),
+                "completion_tokens": usage_data.get("output_tokens", 0),
+                "total_tokens": (
+                    usage_data.get("input_tokens", 0) + usage_data.get("output_tokens", 0)
+                ),
+            }
+            finish_reason = data.get("stop_reason", "stop")
+        else:
+            raise ValueError(f"Unsupported provider type: {provider.type}")
+        
+        # Extract Kong metrics from response headers
+        kong_metadata = {
+            "latency_ms": response.headers.get("X-Kong-Latency", "unknown"),
+            "cost_usd": response.headers.get("X-Kong-Cost", "0.0"),
+            "rate_limit_remaining": response.headers.get("X-RateLimit-Remaining", "unknown"),
+        }
+        
+        return LLMResponse(
+            content=content,
+            model=data.get("model", model),
+            usage=usage,
+            provider=provider.name,
+            finish_reason=finish_reason,
+            metadata=kong_metadata,  # Kong-specific metadata
+        )
+    
+    def _should_fallback(self, error: Exception) -> bool:
+        """Check if error should trigger fallback to next provider."""
+        if isinstance(error, LLMError):
+            return error.retryable
+        
+        if isinstance(error, httpx.TimeoutException):
+            return "timeout" in self.config.fallback.conditions
+        
+        if isinstance(error, httpx.HTTPStatusError):
+            if error.response.status_code >= 500:
+                return "5xx" in self.config.fallback.conditions
+            if error.response.status_code == 429:
+                return "rate_limit" in self.config.fallback.conditions
+        
+        return False
+    
+    async def close(self) -> None:
+        """Close HTTP client."""
+        await self.client.aclose()
+    
+    async def __aenter__(self) -> LLMRouter:
+        """Async context manager entry."""
+        return self
+    
+    async def __aexit__(self, *args: Any) -> None:
+        """Async context manager exit."""
+        await self.close()

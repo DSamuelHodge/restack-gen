@@ -4,10 +4,13 @@
 
 One command generates runnable, testable, observable code that registers itself with the Restack engine.
 
+**NEW in v2.0:** Multi-provider LLM routing, FastMCP tool integration, and prompt versioning!
+
 ---
 
 ## ✨ Features
 
+### Core Scaffolding (v1.0)
 - **🏗️ Rails-style scaffolding**: `restack new`, `restack g agent`, `restack g workflow`, `restack g pipeline`
 - **🔄 Omakase defaults**: Retries, timeouts, heartbeats, logging, typing, tests—all configured out of the box
 - **📝 Operator grammar**: Chain workflows with `→` (sequence), `⇄` (loop), `→?` (conditional)
@@ -15,6 +18,18 @@ One command generates runnable, testable, observable code that registers itself 
 - **🧪 Test-ready**: Unit and integration tests generated automatically
 - **🔍 Observable**: Structured logging with correlation IDs
 - **⚙️ Configurable**: CLI flags, environment variables, and YAML settings with clear precedence
+
+### LLM + Tools + Prompts (v2.0)
+- **🤖 Multi-provider LLM routing**: OpenAI, Anthropic with automatic fallback
+- **🏢 Kong AI Gateway support**: AI rate limiting, cost tracking, content safety
+- **🔌 FastMCP tool scaffolding**: Generate tool servers with `restack g tool-server`
+- **🚀 Autostart tool servers**: Servers start automatically with Restack service
+- **🛠️ Tool calling API**: Clean FastMCPClient interface for agents
+- **🏥 Health monitoring**: `restack doctor --check-tools` validates server health
+- **📝 Prompt versioning**: Git-tracked prompts with A/B testing (Coming in PR #5)
+- **🛡️ Circuit breaker**: Automatic failure detection and recovery
+- **🔄 Intelligent fallback**: Timeout, 5xx, rate limit handling
+- **📊 Response metadata**: Latency, cost, and rate limit tracking
 
 ---
 
@@ -73,9 +88,113 @@ restack g workflow EmailCampaign
 
 # Generate a function
 restack g function SendEmail
+
+# Generate a tool server (NEW in v2.0!)
+restack g tool-server Research
 ```
 
-### 3. Generate a pipeline with operator grammar
+### 3. Generate LLM configuration (NEW in v2.0!)
+
+```bash
+# Option 1: Direct provider calls (simple, no infrastructure)
+restack g llm-config --backend direct
+
+# Option 2: Kong AI Gateway (enterprise features)
+restack g llm-config --backend kong
+
+# Configure your API keys
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# For Kong backend, also set:
+export KONG_GATEWAY_URL=http://localhost:8000
+```
+
+This generates:
+- `config/llm_router.yaml` - Provider configuration
+- `src/myapp/common/llm_router.py` - Router implementation
+
+**Direct backend:** Simple HTTP calls to provider APIs  
+**Kong backend:** AI rate limiting, cost tracking, content safety filters
+
+**Testing Kong Gateway?** See [Kong Quick Test Guide](docs/kong-setup-test.md) for setup validation.
+
+Use in your agents:
+
+```python
+from myapp.common.llm_router import LLMRouter, LLMRequest
+
+router = LLMRouter()
+response = await router.chat(LLMRequest(
+    messages=[{"role": "user", "content": "Hello!"}]
+))
+print(response.content)
+print(response.metadata)  # Kong: latency, cost, rate limit info
+```
+
+**See [LLM Router docs](docs/llm-router.md) for complete guide.**
+
+### 4. Generate FastMCP tool servers (NEW in v2.0!)
+
+```bash
+# Generate a tool server
+restack g tool-server Research
+```
+
+This generates:
+- `src/myapp/tools/research_mcp.py` - FastMCP tool server with sample tools
+- `src/myapp/common/fastmcp_manager.py` - Server lifecycle manager (first time only)
+- `config/tools.yaml` - Tool server configuration (first time only)
+
+The generated server includes three sample tools:
+- `web_search` - Brave Search API integration (placeholder)
+- `extract_urls` - Extract URLs from text
+- `calculate` - Safe math expression evaluator
+
+#### Autostart with Restack (Recommended)
+
+Configure autostart in `config/tools.yaml`:
+
+```yaml
+fastmcp:
+  servers:
+    - name: "research_tools"
+      autostart: true  # Start with Restack service
+```
+
+Then start normally:
+
+```bash
+restack up  # Tool servers start automatically!
+```
+
+#### Use Tools from Agents
+
+```python
+from myapp.common.fastmcp_manager import FastMCPClient
+
+async def research_workflow(ctx):
+    async with FastMCPClient("research_tools") as client:
+        result = await client.call_tool(
+            "web_search",
+            {"query": "latest AI news", "max_results": 5}
+        )
+        return result
+```
+
+#### Monitor Server Health
+
+```bash
+# Check all health including tool servers
+restack doctor --check-tools
+
+# Verbose output with server details
+restack doctor --check-tools --verbose
+```
+
+Replace sample tools with your domain-specific logic. **See [FastMCP Tools docs](docs/fastmcp-tools.md) for complete guide.**
+
+### 5. Generate a pipeline with operator grammar
 
 ```bash
 restack g pipeline BlogPipeline \
@@ -88,7 +207,7 @@ restack g pipeline BlogPipeline \
 - `⇄` : Refinement loop (iterate between A and B)
 - `→?` : Conditional step (run B only if condition met)
 
-### 4. Run the server
+### 6. Run the server
 
 ```bash
 # Check everything is configured correctly
@@ -98,7 +217,7 @@ restack doctor
 restack run:server
 ```
 
-### 5. Trigger workflows
+### 7. Trigger workflows
 
 ```bash
 # Use the generated client
@@ -113,7 +232,9 @@ python client/run_workflow.py
 - **[🚀 Quickstart](docs/quickstart.md)** - Create a project and run it locally
 - **[🧰 CLI Reference](docs/cli-reference.md)** - Commands, options, and examples
 - **[🧩 Templates](docs/templates.md)** - Generated code, headers, and customization
-- **[🩺 Troubleshooting](docs/troubleshooting.md)** - Common issues and fixes
+- **[� LLM Router](docs/llm-router.md)** - Multi-provider routing with Kong support (v2.0)
+- **[🔌 FastMCP Tools](docs/fastmcp-tools.md)** - Tool server scaffolding guide (v2.0)
+- **[�🩺 Troubleshooting](docs/troubleshooting.md)** - Common issues and fixes
 - **[📦 Release Process](docs/RELEASE.md)** - Building, tagging, publishing
 - **[📋 Decisions Log](docs/DECISIONS.md)** - Architecture decisions and rationales
 - **[📝 Product Specs](specs/product_specs.md)** - Detailed feature specifications
