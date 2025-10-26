@@ -3,6 +3,8 @@
 """{{ project_name }} Restack service."""
 
 import asyncio
+import logging
+from pathlib import Path
 from restack_ai import Restack
 
 from {{ project_name }}.common.settings import settings
@@ -25,28 +27,57 @@ from {{ project_name }}.functions.{{ function.module }} import {{ function.name 
 {%- endfor %}
 {% endif %}
 
+# FastMCP Tool Servers (optional)
+try:
+    from {{ project_name }}.common.fastmcp_manager import start_tool_servers, stop_tool_servers
+    FASTMCP_AVAILABLE = Path("config/tools.yaml").exists()
+except ImportError:
+    FASTMCP_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
 
 async def main() -> None:
     """Start Restack service with all registered resources."""
+    # Start FastMCP tool servers if configured
+    if FASTMCP_AVAILABLE:
+        logger.info("Starting FastMCP tool servers...")
+        try:
+            await start_tool_servers()
+            logger.info("FastMCP tool servers started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start tool servers: {e}")
+            logger.warning("Continuing without tool servers")
+    
     client = Restack()
 
-    # Register all workflows and functions
-    await client.start_service(
-        workflows=[
+    try:
+        # Register all workflows and functions
+        await client.start_service(
+            workflows=[
 {%- for agent in agents %}
-            {{ agent.class_name }},
+                {{ agent.class_name }},
 {%- endfor %}
 {%- for workflow in workflows %}
-            {{ workflow.class_name }},
+                {{ workflow.class_name }},
 {%- endfor %}
-        ],
-        functions=[
+            ],
+            functions=[
 {%- for function in functions %}
-            {{ function.name }},
+                {{ function.name }},
 {%- endfor %}
-        ],
-        task_queue="{{ task_queue }}",
-    )
+            ],
+            task_queue="{{ task_queue }}",
+        )
+    finally:
+        # Stop tool servers on shutdown
+        if FASTMCP_AVAILABLE:
+            logger.info("Stopping FastMCP tool servers...")
+            try:
+                await stop_tool_servers()
+                logger.info("FastMCP tool servers stopped")
+            except Exception as e:
+                logger.error(f"Failed to stop tool servers: {e}")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,9 @@ from restack_gen.generator import (
     GenerationError,
     generate_agent,
     generate_function,
+    generate_llm_config,
     generate_pipeline,
+    generate_tool_server,
     generate_workflow,
 )
 from restack_gen.project import create_new_project
@@ -96,24 +98,48 @@ def new(
 @app.command(name="g")
 def generate(
     resource_type: Annotated[
-        str, typer.Argument(help="Type of resource: agent, workflow, function, or pipeline")
+        str, typer.Argument(help="Type of resource: agent, workflow, function, pipeline, tool-server, or llm-config")
     ],
-    name: Annotated[str, typer.Argument(help="Name of the resource to generate")],
+    name: Annotated[str | None, typer.Argument(help="Name of the resource to generate")] = None,
     force: Annotated[bool, typer.Option("--force", help="Overwrite existing files")] = False,
     operators: Annotated[
         str | None, typer.Option("--operators", "-o", help="Operator expression for pipeline (e.g., 'A → B ⇄ C')")
     ] = None,
+    backend: Annotated[
+        str, typer.Option("--backend", help="Backend type for llm-config (direct or kong)")
+    ] = "direct",
 ) -> None:
     """
-    Generate a new resource (agent, workflow, function, or pipeline).
+    Generate a new resource (agent, workflow, function, pipeline, tool-server, or llm-config).
 
     Examples:
         restack g agent Researcher
         restack g workflow EmailCampaign
         restack g function send_email
         restack g pipeline DataPipeline --operators "Fetch → Process ⇄ Store"
+        restack g tool-server Research
+        restack g llm-config
+        restack g llm-config --backend kong
     """
     try:
+        if resource_type == "llm-config":
+            files = generate_llm_config(force=force, backend=backend)
+            console.print(f"[green]✓[/green] Generated LLM router configuration")
+            console.print(f"  Config: {files['config']}")
+            console.print(f"  Router: {files['router']}")
+            console.print("\n[bold cyan]Next steps:[/bold cyan]")
+            console.print("  1. Set environment variables:")
+            console.print("     export OPENAI_API_KEY=sk-...")
+            if backend == "kong":
+                console.print("     export KONG_GATEWAY_URL=http://localhost:8000")
+            console.print("  2. Configure providers in config/llm_router.yaml")
+            console.print("  3. Use LLMRouter in your agents")
+            return
+
+        if not name:
+            console.print(f"[red]Error:[/red] Name is required for {resource_type}")
+            raise typer.Exit(1)
+
         if resource_type == "agent":
             files = generate_agent(name, force=force)
             console.print(f"[green]✓[/green] Generated agent: [bold]{name}[/bold]")
@@ -163,9 +189,21 @@ def generate(
             console.print("  2. Ensure all referenced resources exist")
             console.print("  3. Run tests: make test")
 
+        elif resource_type == "tool-server":
+            files = generate_tool_server(name, force=force)
+            console.print(f"[green]✓[/green] Generated FastMCP tool server: [bold]{name}[/bold]")
+            console.print(f"  Server: {files['server']}")
+            if files.get('config'):
+                console.print(f"  Config: {files['config']}")
+            console.print("\n[bold cyan]Next steps:[/bold cyan]")
+            console.print("  1. Implement your custom tools in the generated file")
+            console.print("  2. Set environment variables (e.g., BRAVE_API_KEY)")
+            console.print("  3. Test server: python -m pytest")
+            console.print("  4. Run server: python " + str(files['server']))
+
         else:
             console.print(f"[red]Error:[/red] Unknown resource type: {resource_type}")
-            console.print("Valid types: agent, workflow, function")
+            console.print("Valid types: agent, workflow, function, pipeline, tool-server, llm-config")
             raise typer.Exit(1)
 
     except GenerationError as e:
@@ -197,6 +235,7 @@ def run_server(
 @app.command()
 def doctor(
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed output")] = False,
+    check_tools: Annotated[bool, typer.Option("--check-tools", help="Check FastMCP tool servers")] = False,
 ) -> None:
     """
     Check environment, configuration, dependencies, and connectivity.
@@ -208,13 +247,15 @@ def doctor(
     - Import resolution
     - File permissions
     - Git status
+    - FastMCP tool servers (with --check-tools)
 
     Example:
         restack doctor
         restack doctor --verbose
+        restack doctor --check-tools
     """
     console.print("[yellow]Running doctor checks...[/yellow]")
-    results = doctor_mod.run_all_checks(base_dir=".", verbose=verbose)
+    results = doctor_mod.run_all_checks(base_dir=".", verbose=verbose, check_tools_flag=check_tools)
 
     def _badge(status: str) -> str:
         return {
