@@ -235,9 +235,7 @@ def generate_parallel_code(parallel: Parallel, indent: int = 0, result_var: str 
         resources: list[Resource] = [cast(Resource, n) for n in parallel.nodes]
         for res in resources:
             activity_name = f"{_to_snake_case(res.name)}_activity"
-            activities.append(
-                f"{inner_spaces}self.execute_activity({activity_name}, {result_var})"
-            )
+            activities.append(f"{inner_spaces}self.execute_activity({activity_name}, {result_var})")
 
         code = f"{spaces}results = await asyncio.gather(\n"
         code += ",\n".join(activities)

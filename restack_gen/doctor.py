@@ -292,9 +292,7 @@ async def _check_tools_health_async(base_dir: Path) -> dict[str, dict[str, Any]]
             # Get manager and check health
             manager_class = manager_module.FastMCPServerManager
             manager = manager_class()
-            health_results = cast(
-                dict[str, dict[str, Any]], await manager.health_check_all()
-            )
+            health_results = cast(dict[str, dict[str, Any]], await manager.health_check_all())
 
             return health_results
         finally:

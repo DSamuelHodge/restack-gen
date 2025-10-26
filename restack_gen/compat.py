@@ -42,6 +42,7 @@ class BaseModel(BaseModelBase):  # type: ignore[misc]
     if PYDANTIC_V2:
         model_config = {"arbitrary_types_allowed": True, "validate_assignment": True}
     else:
+
         class Config:
             arbitrary_types_allowed = True
             validate_assignment = True
@@ -69,6 +70,7 @@ class SettingsBase(SettingsBaseBase):  # type: ignore[misc]
     if PYDANTIC_V2:
         model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
     else:
+
         class Config:
             env_file = ".env"
             env_file_encoding = "utf-8"
