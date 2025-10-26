@@ -5,12 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2025-01-XX
+## [2.0.0] - 2025-10-25
 
 ### Added
 
 #### LLM Router Foundation (PR #1)
-- **Multi-provider LLM routing**: Support for OpenAI and Anthropic providers
+- Prompt versioning system (PR #5):
+  - prompts.yaml registry with versions/latest and resolution modes
+  - PromptLoader with semver resolution and frontmatter parsing
+  - CLI: `restack g prompt <Name> --version X.Y.Z`
+  - Docs: `docs/prompt-versioning.md`
 - **CLI command**: `restack g llm-config --backend direct` generates router configuration
 - **Automatic fallback**: Routes to next provider on timeout, 5xx, or rate limit
 - **Circuit breaker**: Prevents cascading failures with 5-failure threshold and 60s cooldown

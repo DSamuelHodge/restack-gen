@@ -1,7 +1,6 @@
 """Tests for DataSaver agent."""
 
 import pytest
-
 from data_pipeline.agents.data_saver import data_saver_activity
 
 

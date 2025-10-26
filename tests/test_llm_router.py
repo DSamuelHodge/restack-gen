@@ -1,10 +1,10 @@
 """Tests for LLM router generation and functionality."""
 
-import pytest
-from pathlib import Path
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch
 
-from restack_gen.generator import generate_llm_config, GenerationError
+import pytest
+
+from restack_gen.generator import GenerationError, generate_llm_config
 
 
 class TestLLMConfigGeneration:
@@ -16,23 +16,23 @@ class TestLLMConfigGeneration:
         project_root = tmp_path / "myproject"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "myproject"\n')
-        
+
         # Mock find_project_root to return our temp path
         monkeypatch.chdir(project_root)
-        
+
         with patch("restack_gen.generator.find_project_root", return_value=project_root):
             files = generate_llm_config(force=False, backend="direct")
-        
+
         # Check that files were created
         assert files["config"].exists()
         assert files["router"].exists()
-        
+
         # Check file contents
         config_content = files["config"].read_text()
         assert "llm:" in config_content
-        assert "backend: \"direct\"" in config_content
+        assert 'backend: "direct"' in config_content
         assert "openai-primary" in config_content
-        
+
         router_content = files["router"].read_text()
         assert "class LLMRouter:" in router_content
         assert "async def chat" in router_content
@@ -42,19 +42,19 @@ class TestLLMConfigGeneration:
         project_root = tmp_path / "myproject"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "myproject"\n')
-        
+
         monkeypatch.chdir(project_root)
-        
+
         with patch("restack_gen.generator.find_project_root", return_value=project_root):
             files = generate_llm_config(force=False, backend="kong")
-        
+
         config_content = files["config"].read_text()
         assert "backend:" in config_content
 
     def test_generate_llm_config_without_project_fails(self, tmp_path, monkeypatch):
         """Test that generation fails outside a project."""
         monkeypatch.chdir(tmp_path)
-        
+
         with patch("restack_gen.generator.find_project_root", return_value=None):
             with pytest.raises(GenerationError, match="Not in a restack-gen project"):
                 generate_llm_config()
@@ -64,19 +64,19 @@ class TestLLMConfigGeneration:
         project_root = tmp_path / "myproject"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "myproject"\n')
-        
+
         config_dir = project_root / "config"
         config_dir.mkdir()
         config_file = config_dir / "llm_router.yaml"
         config_file.write_text("existing content")
-        
+
         monkeypatch.chdir(project_root)
-        
+
         # Without force, should fail
         with patch("restack_gen.generator.find_project_root", return_value=project_root):
             with pytest.raises(GenerationError, match="already exists"):
                 generate_llm_config(force=False)
-        
+
         # With force, should succeed
         with patch("restack_gen.generator.find_project_root", return_value=project_root):
             files = generate_llm_config(force=True)
@@ -99,7 +99,7 @@ class TestLLMRouterModule:
         """Test fallback logic on timeout."""
         pass
 
-    @pytest.mark.asyncio  
+    @pytest.mark.asyncio
     async def test_llm_router_fallback_on_5xx(self):
         """Test fallback logic on 5xx errors."""
         pass
@@ -123,12 +123,12 @@ class TestKongBackend:
         project_root = tmp_path / "myproject"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "myproject"\n')
-        
+
         monkeypatch.chdir(project_root)
-        
+
         with patch("restack_gen.generator.find_project_root", return_value=project_root):
             files = generate_llm_config(force=False, backend="kong")
-        
+
         config_content = files["config"].read_text()
         assert 'backend: "kong"' in config_content
         # Kong features should be enabled

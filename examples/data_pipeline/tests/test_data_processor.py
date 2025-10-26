@@ -1,7 +1,6 @@
 """Tests for DataProcessor agent."""
 
 import pytest
-
 from data_pipeline.agents.data_processor import data_processor_activity
 
 

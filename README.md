@@ -26,7 +26,7 @@ One command generates runnable, testable, observable code that registers itself 
 - **🚀 Autostart tool servers**: Servers start automatically with Restack service
 - **🛠️ Tool calling API**: Clean FastMCPClient interface for agents
 - **🏥 Health monitoring**: `restack doctor --check-tools` validates server health
-- **📝 Prompt versioning**: Git-tracked prompts with A/B testing (Coming in PR #5)
+- **📝 Prompt versioning**: Git-tracked prompts with semantic versioning and loader (PR #5)
 - **🛡️ Circuit breaker**: Automatic failure detection and recovery
 - **🔄 Intelligent fallback**: Timeout, 5xx, rate limit handling
 - **📊 Response metadata**: Latency, cost, and rate limit tracking

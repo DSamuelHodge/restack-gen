@@ -1,9 +1,7 @@
 """Tests for pipeline validator."""
 
-import pytest
-
 from restack_gen.ir import Conditional, Parallel, Resource, Sequence
-from restack_gen.validator import PipelineValidator, ValidationError, validate_pipeline
+from restack_gen.validator import PipelineValidator, validate_pipeline
 
 
 class TestValidatorResourceCollection:

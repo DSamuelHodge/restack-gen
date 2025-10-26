@@ -1,8 +1,8 @@
 """Tests for FastMCP tool server generation."""
 
 import pytest
-from pathlib import Path
-from restack_gen.generator import generate_tool_server, GenerationError
+
+from restack_gen.generator import GenerationError, generate_tool_server
 from restack_gen.project import create_new_project
 
 
@@ -23,7 +23,7 @@ class TestToolServerGeneration:
 
         assert files["server"].exists()
         assert files["server"].name == "research_mcp.py"
-        
+
         # Check config file
         if files.get("config"):
             assert files["config"].exists()
@@ -41,7 +41,7 @@ class TestToolServerGeneration:
         assert "from fastmcp import FastMCP" in content
         assert "class ResearchToolServer:" in content
         assert 'mcp = FastMCP("research_tools")' in content
-        
+
         # Check for sample tools
         assert "@mcp.tool()" in content
         assert "async def web_search" in content
@@ -69,17 +69,17 @@ class TestToolServerGeneration:
     def test_generate_tool_server_config_content(self, temp_project):
         """Test that generated config has correct structure."""
         files = generate_tool_server("Research", force=True)
-        
+
         if not files.get("config"):
             pytest.skip("Config file already exists")
-        
+
         config_file = files["config"]
         content = config_file.read_text()
 
         # Check YAML structure
         assert "fastmcp:" in content
         assert "servers:" in content
-        assert "name: \"research_tools\"" in content
+        assert 'name: "research_tools"' in content
         assert 'module: "src.testapp.tools.research_mcp"' in content
         assert 'class: "ResearchToolServer"' in content
         assert 'transport: "stdio"' in content
@@ -104,8 +104,7 @@ class TestToolServerGeneration:
     def test_generate_tool_server_respects_force_flag(self, temp_project):
         """Test that force flag controls file overwriting."""
         # First generation
-        files1 = generate_tool_server("Research", force=True)
-        original_content = files1["server"].read_text()
+        generate_tool_server("Research", force=True)
 
         # Second generation without force should fail
         with pytest.raises(GenerationError, match="already exists"):
@@ -156,10 +155,10 @@ class TestToolServerGeneration:
     def test_tool_server_tools_init_created(self, temp_project):
         """Test that __init__.py is created in tools directory."""
         files = generate_tool_server("Research", force=True)
-        
+
         tools_dir = files["server"].parent
         init_file = tools_dir / "__init__.py"
-        
+
         assert init_file.exists()
         content = init_file.read_text()
         assert "FastMCP tool servers" in content
