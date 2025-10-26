@@ -146,6 +146,44 @@ def write_file(file_path: Path, content: str) -> None:
         f.write(content)
 
 
+def _read_yaml(file_path: Path) -> dict:
+    """Read a YAML file into a dict, returning empty dict if missing.
+
+    Args:
+        file_path: YAML file path
+
+    Returns:
+        Dict parsed from YAML or empty dict if file doesn't exist
+    """
+    import yaml
+
+    if not file_path.exists():
+        return {}
+    with open(file_path, encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def _write_yaml(file_path: Path, data: dict) -> None:
+    """Write a dict to YAML file with safe formatting."""
+    import yaml
+    import re
+
+    # Use a custom dumper that quotes only semver-like strings and prompt file paths
+    class SemverQuotedDumper(yaml.SafeDumper):
+        pass
+
+    def _conditional_str_representer(dumper, value: str):
+        if re.match(r"^\d+\.\d+\.\d+$", value) or value.startswith("prompts/"):
+            return dumper.represent_scalar("tag:yaml.org,2002:str", value, style='"')
+        return dumper.represent_scalar("tag:yaml.org,2002:str", value)
+
+    SemverQuotedDumper.add_representer(str, _conditional_str_representer)
+
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(file_path, "w", encoding="utf-8") as f:
+        yaml.dump(data, f, sort_keys=False, Dumper=SemverQuotedDumper)
+
+
 def generate_agent(
     name: str,
     force: bool = False,
@@ -567,6 +605,128 @@ def generate_llm_config(
     return {
         "config": config_file,
         "router": llm_router_file,
+    }
+
+
+def generate_prompt(
+    name: str,
+    version: str = "1.0.0",
+    force: bool = False,
+) -> dict[str, Path]:
+    """Generate a versioned prompt markdown file and update the prompt registry.
+
+    Creates/updates config/prompts.yaml and ensures a prompt loader exists.
+
+    Args:
+        name: Prompt name (PascalCase or snake_case). Stored as snake_case key.
+        version: Semantic version (e.g., 1.0.0). Determines file path.
+        force: Overwrite existing prompt version file if set.
+
+    Returns:
+        Dict with paths: {'prompt', 'config', 'loader' (optional)}
+    """
+    # Validate name
+    is_valid, error = validate_name(name)
+    if not is_valid:
+        raise GenerationError(f"Invalid prompt name: {error}")
+
+    # Find project root
+    project_root = find_project_root()
+    if not project_root:
+        raise GenerationError(
+            "Not in a restack-gen project. Run this command from within a project directory."
+        )
+
+    project_name = get_project_name(project_root)
+
+    # Normalize key and file locations
+    prompt_key = to_snake_case(name)
+    config_file = project_root / "config" / "prompts.yaml"
+    prompt_dir = project_root / "prompts" / prompt_key
+    prompt_file = prompt_dir / f"v{version}.md"
+    common_dir = project_root / "src" / project_name / "common"
+    loader_file = common_dir / "prompt_loader.py"
+
+    # Check overwrite policy for prompt file
+    if prompt_file.exists() and not force:
+        # Even though prompt files are user-editable, we guard accidental overwrite
+        raise GenerationError(
+            f"Prompt version file {prompt_file} already exists. Use --force to overwrite."
+        )
+
+    # Ensure prompt loader exists (generate if missing)
+    loader_generated = False
+    if not loader_file.exists():
+        from importlib.metadata import version as _pkg_version
+        import datetime as _dt
+
+        try:
+            gen_version = _pkg_version("restack-gen")
+        except Exception:
+            gen_version = "unknown"
+
+        loader_content = render_template(
+            "prompt_loader.py.j2",
+            {
+                "version": gen_version,
+                "timestamp": _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            },
+        )
+        write_file(loader_file, loader_content)
+        # create __init__ in common if absent
+        init_file = common_dir / "__init__.py"
+        if not init_file.exists():
+            write_file(init_file, '"""Common utilities and shared components."""\n')
+        loader_generated = True
+
+    # Render prompt markdown from template
+    prompt_md = render_template(
+        "prompt_template.md.j2",
+        {
+            "version": version,
+            "model": "gpt-4o-mini",
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            "name": prompt_key,
+        },
+    )
+    write_file(prompt_file, prompt_md)
+
+    # Update registry YAML
+    registry = _read_yaml(config_file)
+    if "prompts" not in registry:
+        registry["prompts"] = {}
+    entry = registry["prompts"].get(prompt_key) or {
+        "description": f"Prompt for {prompt_key.replace('_', ' ')}",
+        "versions": {},
+        "latest": version,
+        "resolution": "semver",
+    }
+    # Add/overwrite mapping for version to file path
+    rel_path = f"prompts/{prompt_key}/v{version}.md"
+    entry.setdefault("versions", {})[version] = rel_path
+    # Update 'latest' if the incoming version is greater (lexicographic fallback to simple semver compare)
+    def _parse(v: str) -> tuple[int, int, int]:
+        try:
+            major, minor, patch = v.split(".")
+            return (int(major), int(minor), int(patch))
+        except Exception:
+            return (0, 0, 0)
+
+    try:
+        if _parse(version) >= _parse(entry.get("latest", "0.0.0")):
+            entry["latest"] = version
+    except Exception:
+        # Best effort; keep existing latest if parsing failed
+        pass
+
+    registry["prompts"][prompt_key] = entry
+    _write_yaml(config_file, registry)
+
+    return {
+        "prompt": prompt_file,
+        "config": config_file,
+        "loader": loader_file if loader_generated else None,
     }
 
 

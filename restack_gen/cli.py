@@ -14,6 +14,7 @@ from restack_gen.generator import (
     generate_agent,
     generate_function,
     generate_llm_config,
+    generate_prompt,
     generate_pipeline,
     generate_tool_server,
     generate_workflow,
@@ -98,7 +99,7 @@ def new(
 @app.command(name="g")
 def generate(
     resource_type: Annotated[
-        str, typer.Argument(help="Type of resource: agent, workflow, function, pipeline, tool-server, or llm-config")
+        str, typer.Argument(help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, or prompt")
     ],
     name: Annotated[str | None, typer.Argument(help="Name of the resource to generate")] = None,
     force: Annotated[bool, typer.Option("--force", help="Overwrite existing files")] = False,
@@ -108,9 +109,12 @@ def generate(
     backend: Annotated[
         str, typer.Option("--backend", help="Backend type for llm-config (direct or kong)")
     ] = "direct",
+    version: Annotated[
+        str, typer.Option("--version", help="Prompt version (semver)")
+    ] = "1.0.0",
 ) -> None:
     """
-    Generate a new resource (agent, workflow, function, pipeline, tool-server, or llm-config).
+    Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, or prompt).
 
     Examples:
         restack g agent Researcher
@@ -118,8 +122,9 @@ def generate(
         restack g function send_email
         restack g pipeline DataPipeline --operators "Fetch → Process ⇄ Store"
         restack g tool-server Research
-        restack g llm-config
+    restack g llm-config
         restack g llm-config --backend kong
+    restack g prompt AnalyzeResearch --version 1.0.0
     """
     try:
         if resource_type == "llm-config":
@@ -201,9 +206,21 @@ def generate(
             console.print("  3. Test server: python -m pytest")
             console.print("  4. Run server: python " + str(files['server']))
 
+        elif resource_type == "prompt":
+            files = generate_prompt(name, version=version, force=force)
+            console.print(f"[green]✓[/green] Generated prompt: [bold]{name}[/bold] v{version}")
+            console.print(f"  Prompt file: {files['prompt']}")
+            console.print(f"  Registry: {files['config']}")
+            if files.get("loader"):
+                console.print(f"  Loader: {files['loader']}")
+            console.print("\n[bold cyan]Next steps:[/bold cyan]")
+            console.print("  1. Edit the markdown template to fit your use case")
+            console.print("  2. Load prompts via PromptLoader in your agents")
+            console.print("  3. Add more versions with --version and update 'latest' if appropriate")
+
         else:
             console.print(f"[red]Error:[/red] Unknown resource type: {resource_type}")
-            console.print("Valid types: agent, workflow, function, pipeline, tool-server, llm-config")
+            console.print("Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt")
             raise typer.Exit(1)
 
     except GenerationError as e:
