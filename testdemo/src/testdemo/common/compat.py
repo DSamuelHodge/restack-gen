@@ -5,18 +5,21 @@
 import yaml
 
 try:
-    from pydantic.v1 import BaseModel as V1BaseModel, Field as V1Field
+    from pydantic.v1 import BaseModel as V1BaseModel
+    from pydantic.v1 import Field as V1Field
     from pydantic.v1.env_settings import BaseSettings as V1BaseSettings
 
     PYDANTIC_V2 = False
 except ImportError:
     try:
-        from pydantic import BaseModel as V2BaseModel, Field as V2Field
+        from pydantic import BaseModel as V2BaseModel
+        from pydantic import Field as V2Field
         from pydantic_settings import BaseSettings as V2BaseSettings
 
         PYDANTIC_V2 = True
     except ImportError:
-        raise ImportError("Pydantic is not installed")
+        # Make the origin of this ImportError explicit
+        raise ImportError("Pydantic is not installed") from None
 
 
 if PYDANTIC_V2:

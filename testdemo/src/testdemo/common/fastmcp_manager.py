@@ -5,13 +5,15 @@ Generated at: 2025-10-26 00:27:34
 
 import asyncio
 import importlib
-import os
-import sys
-from pathlib import Path
-from typing import Any, Optional
-import yaml
 import logging
+import os
+from contextlib import suppress
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -19,15 +21,16 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ServerConfig:
     """Configuration for a FastMCP server"""
+
     name: str
     module: str
     class_name: str
     transport: str = "stdio"
-    url: Optional[str] = None
+    url: str | None = None
     autostart: bool = True
     env: dict[str, str] = None
     health_check: dict[str, Any] = None
-    
+
     def __post_init__(self):
         if self.env is None:
             self.env = {}
@@ -37,17 +40,17 @@ class ServerConfig:
 
 class FastMCPServerManager:
     """Manage lifecycle of FastMCP tool servers
-    
+
     Responsibilities:
     - Load server configuration from tools.yaml
     - Start/stop tool servers
     - Health check monitoring
     - Provide server registry for clients
     """
-    
+
     def __init__(self, config_path: str = "config/tools.yaml"):
         """Initialize FastMCP Server Manager
-        
+
         Args:
             config_path: Path to tools.yaml configuration file
         """
@@ -56,21 +59,21 @@ class FastMCPServerManager:
         self.server_tasks: dict[str, asyncio.Task] = {}
         self.server_configs: dict[str, ServerConfig] = {}
         self._load_config()
-    
+
     def _load_config(self):
         """Load server configurations from YAML file"""
         if not self.config_path.exists():
             logger.warning(f"Config file not found: {self.config_path}")
             return
-        
+
         try:
             with open(self.config_path) as f:
                 data = yaml.safe_load(f)
-            
+
             if not data or "fastmcp" not in data:
                 logger.warning("No fastmcp configuration found in tools.yaml")
                 return
-            
+
             servers = data["fastmcp"].get("servers", [])
             for server_data in servers:
                 config = ServerConfig(
@@ -81,78 +84,76 @@ class FastMCPServerManager:
                     url=server_data.get("url"),
                     autostart=server_data.get("autostart", True),
                     env=server_data.get("env", {}),
-                    health_check=server_data.get("health_check", {})
+                    health_check=server_data.get("health_check", {}),
                 )
                 self.server_configs[config.name] = config
                 logger.info(f"Loaded config for server: {config.name}")
-        
+
         except Exception as e:
             logger.error(f"Failed to load config: {e}")
             raise
-    
+
     async def start_all(self):
         """Start all servers configured with autostart=true"""
         autostart_servers = [
-            name for name, config in self.server_configs.items()
-            if config.autostart
+            name for name, config in self.server_configs.items() if config.autostart
         ]
-        
+
         if not autostart_servers:
             logger.info("No autostart servers configured")
             return
-        
+
         logger.info(f"Starting {len(autostart_servers)} autostart servers")
-        
+
         for server_name in autostart_servers:
             try:
                 await self.start_server(server_name)
             except Exception as e:
                 logger.error(f"Failed to start server {server_name}: {e}")
-    
+
     async def start_server(self, name: str):
         """Start a specific FastMCP server
-        
+
         Args:
             name: Server name from configuration
-            
+
         Raises:
             ValueError: If server not found in configuration
             ImportError: If server module cannot be imported
         """
         if name not in self.server_configs:
             raise ValueError(f"Server '{name}' not found in configuration")
-        
+
         if name in self.servers:
             logger.warning(f"Server '{name}' already running")
             return
-        
+
         config = self.server_configs[name]
         logger.info(f"Starting server: {name} (transport={config.transport})")
-        
+
         # Set environment variables
         for key, value in config.env.items():
             # Expand environment variables in values
             expanded_value = os.path.expandvars(value)
             os.environ[key] = expanded_value
-        
+
         try:
             # Import server module and class
             module = importlib.import_module(config.module)
             server_class = getattr(module, config.class_name)
-            
+
             # Instantiate server
             server = server_class()
             self.servers[name] = server
-            
+
             # Start server in background task
             task = asyncio.create_task(
-                self._run_server(name, server, config.transport),
-                name=f"fastmcp-{name}"
+                self._run_server(name, server, config.transport), name=f"fastmcp-{name}"
             )
             self.server_tasks[name] = task
-            
+
             logger.info(f"Server '{name}' started successfully")
-            
+
         except ImportError as e:
             logger.error(f"Failed to import server module: {e}")
             raise
@@ -162,10 +163,10 @@ class FastMCPServerManager:
         except Exception as e:
             logger.error(f"Failed to start server: {e}")
             raise
-    
+
     async def _run_server(self, name: str, server: Any, transport: str):
         """Run server in background task
-        
+
         Args:
             name: Server name
             server: Server instance
@@ -180,90 +181,84 @@ class FastMCPServerManager:
             # Remove from registry
             if name in self.servers:
                 del self.servers[name]
-    
+
     async def stop_server(self, name: str):
         """Stop a running server
-        
+
         Args:
             name: Server name to stop
         """
         if name not in self.servers:
             logger.warning(f"Server '{name}' not running")
             return
-        
+
         logger.info(f"Stopping server: {name}")
-        
+
         # Cancel background task
         if name in self.server_tasks:
             task = self.server_tasks[name]
             task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
             del self.server_tasks[name]
-        
+
         # Remove from registry
         del self.servers[name]
         logger.info(f"Server '{name}' stopped")
-    
+
     async def stop_all(self):
         """Stop all running servers"""
         server_names = list(self.servers.keys())
-        
+
         if not server_names:
             logger.info("No servers running")
             return
-        
+
         logger.info(f"Stopping {len(server_names)} servers")
-        
+
         for name in server_names:
             await self.stop_server(name)
-    
+
     async def health_check(self, name: str) -> dict[str, Any]:
         """Check health of a specific server
-        
+
         Args:
             name: Server name to check
-            
+
         Returns:
             Dict with health status and details
         """
         if name not in self.server_configs:
-            return {
-                "name": name,
-                "status": "unknown",
-                "error": "Server not found in configuration"
-            }
-        
+            return {"name": name, "status": "unknown", "error": "Server not found in configuration"}
+
         if name not in self.servers:
             return {
                 "name": name,
                 "status": "stopped",
                 "configured": True,
-                "autostart": self.server_configs[name].autostart
+                "autostart": self.server_configs[name].autostart,
             }
-        
+
         config = self.server_configs[name]
         server = self.servers[name]
-        
+
         try:
             # Call server's health_check method if available
-            if hasattr(server, 'health_check'):
+            if hasattr(server, "health_check"):
                 is_healthy = await server.health_check()
-                
+
                 if is_healthy:
                     return {
                         "name": name,
                         "status": "healthy",
                         "transport": config.transport,
-                        "url": config.url
+                        "url": config.url,
                     }
                 else:
                     return {
                         "name": name,
                         "status": "unhealthy",
-                        "error": "Health check returned False"
+                        "error": "Health check returned False",
                     }
             else:
                 # Server doesn't implement health check
@@ -271,55 +266,53 @@ class FastMCPServerManager:
                     "name": name,
                     "status": "running",
                     "transport": config.transport,
-                    "health_check": "not_implemented"
+                    "health_check": "not_implemented",
                 }
-        
+
         except Exception as e:
-            return {
-                "name": name,
-                "status": "error",
-                "error": str(e)
-            }
-    
+            return {"name": name, "status": "error", "error": str(e)}
+
     async def health_check_all(self) -> dict[str, dict[str, Any]]:
         """Check health of all configured servers
-        
+
         Returns:
             Dict mapping server names to health status
         """
         results = {}
-        
+
         for name in self.server_configs:
             results[name] = await self.health_check(name)
-        
+
         return results
-    
+
     def list_servers(self) -> list[dict[str, Any]]:
         """List all configured servers with status
-        
+
         Returns:
             List of server info dicts
         """
         servers = []
-        
+
         for name, config in self.server_configs.items():
-            servers.append({
-                "name": name,
-                "module": config.module,
-                "class": config.class_name,
-                "transport": config.transport,
-                "autostart": config.autostart,
-                "running": name in self.servers
-            })
-        
+            servers.append(
+                {
+                    "name": name,
+                    "module": config.module,
+                    "class": config.class_name,
+                    "transport": config.transport,
+                    "autostart": config.autostart,
+                    "running": name in self.servers,
+                }
+            )
+
         return servers
-    
-    def get_server(self, name: str) -> Optional[Any]:
+
+    def get_server(self, name: str) -> Any | None:
         """Get a running server instance
-        
+
         Args:
             name: Server name
-            
+
         Returns:
             Server instance if running, None otherwise
         """
@@ -328,15 +321,15 @@ class FastMCPServerManager:
 
 class FastMCPClient:
     """Client for calling FastMCP tools from agents
-    
+
     Usage:
         async with FastMCPClient("research_tools") as client:
             result = await client.call_tool("web_search", {"query": "AI news"})
     """
-    
-    def __init__(self, server_name: str, manager: Optional[FastMCPServerManager] = None):
+
+    def __init__(self, server_name: str, manager: FastMCPServerManager | None = None):
         """Initialize FastMCP Client
-        
+
         Args:
             server_name: Name of the tool server to connect to
             manager: Server manager instance (optional, will create if not provided)
@@ -344,75 +337,71 @@ class FastMCPClient:
         self.server_name = server_name
         self.manager = manager or FastMCPServerManager()
         self.server = None
-    
+
     async def __aenter__(self):
         """Async context manager entry"""
         self.server = self.manager.get_server(self.server_name)
-        
+
         if not self.server:
             raise RuntimeError(
                 f"Server '{self.server_name}' not running. "
                 f"Check tools.yaml and ensure autostart=true or start manually."
             )
-        
+
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit"""
         pass
-    
-    async def call_tool(
-        self, 
-        tool_name: str, 
-        arguments: dict[str, Any]
-    ) -> Any:
+
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """Call a tool on the server
-        
+
         Args:
             tool_name: Name of the tool to call
             arguments: Tool arguments as a dictionary
-            
+
         Returns:
             Tool execution result
-            
+
         Raises:
             RuntimeError: If server not running or tool not found
         """
         if not self.server:
             raise RuntimeError(f"Not connected to server '{self.server_name}'")
-        
+
         try:
             # Get the tool function from the server's FastMCP instance
             mcp = self.server.mcp
             tools = mcp.list_tools()
-            
+
             # Find the tool
             tool = next((t for t in tools if t["name"] == tool_name), None)
             if not tool:
                 raise ValueError(f"Tool '{tool_name}' not found on server '{self.server_name}'")
-            
+
             # Get the actual function
             tool_fn = mcp.get_tool(tool_name)
-            
+
             # Call the tool with arguments
             result = await tool_fn(**arguments)
-            
+
             logger.info(f"Tool call successful: {self.server_name}.{tool_name}")
             return result
-        
+
         except Exception as e:
             logger.error(f"Tool call failed: {e}")
             raise
-    
+
     async def list_tools(self) -> list[dict[str, Any]]:
         """List available tools on the server
-        
+
         Returns:
             List of tool metadata dicts
         """
         if not self.server:
             raise RuntimeError(f"Not connected to server '{self.server_name}'")
-        
+
         try:
             mcp = self.server.mcp
             tools = mcp.list_tools()
@@ -422,27 +411,15 @@ class FastMCPClient:
             raise
 
 
-# Global manager instance
-_manager: Optional[FastMCPServerManager] = None
-
-
+@lru_cache(maxsize=1)
 def get_manager() -> FastMCPServerManager:
-    """Get or create global FastMCP Server Manager
-    
-    Returns:
-        Global manager instance
-    """
-    global _manager
-    
-    if _manager is None:
-        _manager = FastMCPServerManager()
-    
-    return _manager
+    """Get or create a cached FastMCP Server Manager without using globals."""
+    return FastMCPServerManager()
 
 
 async def start_tool_servers():
     """Start all autostart tool servers
-    
+
     This should be called during service initialization
     """
     manager = get_manager()
@@ -451,7 +428,7 @@ async def start_tool_servers():
 
 async def stop_tool_servers():
     """Stop all running tool servers
-    
+
     This should be called during service shutdown
     """
     manager = get_manager()

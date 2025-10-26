@@ -2,11 +2,9 @@
 # command: restack new testdemo
 """Settings for testdemo."""
 
-import os
 from pathlib import Path
-from typing import Dict
 
-from testdemo.common.compat import SettingsBase, Field
+from testdemo.common.compat import Field, SettingsBase
 
 
 class PipelineLoopSettings(SettingsBase):
@@ -21,6 +19,7 @@ class PipelineSettings(SettingsBase):
     # Using simplified approach for compatibility
     class Config:
         """Pydantic configuration."""
+
         extra = "allow"
 
 

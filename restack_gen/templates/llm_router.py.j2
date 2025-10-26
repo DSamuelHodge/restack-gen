@@ -15,6 +15,7 @@ from typing import Any, Literal
 import httpx
 import yaml
 from pydantic import BaseModel, Field
+from .observability import observe_llm_call
 
 
 class LLMProviderType(str, Enum):
@@ -32,6 +33,8 @@ class LLMRequest(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 4096
     stream: bool = False
+    # Optional metadata for observability/correlation (e.g., run_id, agent_id)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class LLMResponse(BaseModel):
@@ -249,13 +252,48 @@ class LLMRouter:
             LLM response
         """
         if self.config.router.backend == "kong":
-            return await self._call_kong(provider, request)
+            # Observability wrapper for Kong path
+            async with observe_llm_call(
+                correlation=request.metadata,
+                provider=provider.name,
+                model=request.model or provider.model,
+                backend="kong",
+            ) as obs:
+                resp = await self._call_kong(provider, request)
+                # capture token usage for logging (if available)
+                try:
+                    obs["usage"] = resp.usage or {}
+                except Exception:
+                    pass
+                return resp
         
         # Direct provider call
         if provider.type == LLMProviderType.OPENAI:
-            return await self._call_openai(provider, request)
+            async with observe_llm_call(
+                correlation=request.metadata,
+                provider=provider.name,
+                model=request.model or provider.model,
+                backend="direct",
+            ) as obs:
+                resp = await self._call_openai(provider, request)
+                try:
+                    obs["usage"] = resp.usage or {}
+                except Exception:
+                    pass
+                return resp
         elif provider.type == LLMProviderType.ANTHROPIC:
-            return await self._call_anthropic(provider, request)
+            async with observe_llm_call(
+                correlation=request.metadata,
+                provider=provider.name,
+                model=request.model or provider.model,
+                backend="direct",
+            ) as obs:
+                resp = await self._call_anthropic(provider, request)
+                try:
+                    obs["usage"] = resp.usage or {}
+                except Exception:
+                    pass
+                return resp
         else:
             raise ValueError(f"Unsupported provider type: {provider.type}")
     

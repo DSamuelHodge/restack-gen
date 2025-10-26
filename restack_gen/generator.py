@@ -585,6 +585,7 @@ def generate_llm_config(
     config_file = config_dir / "llm_router.yaml"
     common_dir = project_root / "src" / project_name / "common"
     llm_router_file = common_dir / "llm_router.py"
+    observability_file = common_dir / "observability.py"
 
     # Check if files exist
     if config_file.exists() and not force:
@@ -608,6 +609,11 @@ def generate_llm_config(
     router_content = render_template("llm_router.py.j2", context)
     write_file(llm_router_file, router_content)
 
+    # Generate observability helpers (idempotent; overwrite only with force)
+    if not observability_file.exists() or force:
+        observability_content = render_template("observability.py.j2", {})
+        write_file(observability_file, observability_content)
+
     # Create __init__.py in common if it doesn't exist
     init_file = common_dir / "__init__.py"
     if not init_file.exists():
@@ -616,6 +622,7 @@ def generate_llm_config(
     return {
         "config": config_file,
         "router": llm_router_file,
+        "observability": observability_file,
     }
 
 
@@ -795,6 +802,7 @@ def generate_tool_server(
     tools_init = tools_dir / "__init__.py"
     common_dir = project_root / "src" / project_name / "common"
     manager_file = common_dir / "fastmcp_manager.py"
+    observability_file = common_dir / "observability.py"
 
     # Check if files exist
     if server_file.exists() and not force:
@@ -830,6 +838,15 @@ def generate_tool_server(
     # Create __init__.py in tools directory if it doesn't exist
     if not tools_init.exists():
         write_file(tools_init, '"""FastMCP tool servers for agent capabilities."""\n')
+
+    # Ensure observability helpers exist (idempotent)
+    if not observability_file.exists() or force:
+        try:
+            observability_content = render_template("observability.py.j2", {})
+            write_file(observability_file, observability_content)
+        except Exception:
+            # Best effort; manager generation may still proceed
+            pass
 
     # Generate FastMCP manager if this is the first tool server
     manager_generated = False

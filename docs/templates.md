@@ -19,6 +19,13 @@ Generated files include header markers like:
 
 Templates are packaged under `restack_gen/templates` and included in the wheel. You don't need to copy them locally in normal use.
 
+### Observability helpers
+
+- A lightweight `common/observability.py` module is generated when you scaffold LLM config or tool servers.
+- It emits one-line JSON logs for LLM and tool calls with optional correlation fields like `run_id` and `agent_id`.
+- Use the async context managers `observe_llm_call(...)` and `observe_tool_call(...)` to wrap calls; the LLM router and FastMCP client templates already do this.
+- Pass `metadata={"run_id": "...", "agent_id": "..."}` in `LLMRequest` or `correlation={...}` in `FastMCPClient.call_tool(...)` to enrich logs.
+
 ## Customization guidance
 
 - Edit function/agent/workflow bodies freely.

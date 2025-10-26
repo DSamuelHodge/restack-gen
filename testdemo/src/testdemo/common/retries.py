@@ -3,8 +3,8 @@
 """Retry policies for testdemo."""
 
 from datetime import timedelta
-from restack_ai import RetryPolicy
 
+from restack_ai import RetryPolicy
 
 DEFAULT_RETRY = RetryPolicy(
     initial_interval=timedelta(seconds=1),

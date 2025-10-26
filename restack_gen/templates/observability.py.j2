@@ -1,0 +1,150 @@
+"""Structured observability helpers for LLM and tool calls.
+
+This module provides lightweight, dependency-free structured logging helpers
+that emit one-line JSON events for easy ingestion by log systems.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
+
+logger = logging.getLogger(__name__)
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _to_json(payload: dict[str, Any]) -> str:
+    try:
+        return json.dumps(payload, separators=(",", ":"))
+    except Exception as _:
+        # Fallback to string representation if not JSON-serializable
+        return json.dumps({"event": "serialization_error", "data": str(payload)})
+
+
+def log_event(event_type: str, **data: Any) -> None:
+    """Emit a structured one-line JSON log message.
+
+    Args:
+        event_type: Short event type (e.g., 'llm_call_start')
+        **data: Arbitrary structured fields to include
+    """
+    payload = {"type": event_type, **data}
+    logger.info(_to_json(payload))
+
+
+@asynccontextmanager
+async def observe_llm_call(
+    *,
+    correlation: dict[str, Any] | None = None,
+    provider: str,
+    model: str,
+    backend: str,
+) -> AsyncIterator[dict[str, Any]]:
+    """Async context manager to observe an LLM call.
+
+    Yields a mutable dict you can populate with usage info: ctx["usage"].
+    """
+    corr = correlation or {}
+    start_ms = _now_ms()
+    start_perf = time.perf_counter()
+
+    log_event(
+        "llm_call_start",
+        provider=provider,
+        model=model,
+        backend=backend,
+        run_id=corr.get("run_id"),
+        agent_id=corr.get("agent_id"),
+        ts=start_ms,
+    )
+
+    ctx: dict[str, Any] = {}
+    try:
+        yield ctx
+        duration_ms = int((time.perf_counter() - start_perf) * 1000)
+        usage = ctx.get("usage") or {}
+        log_event(
+            "llm_call_end",
+            provider=provider,
+            model=model,
+            backend=backend,
+            run_id=corr.get("run_id"),
+            agent_id=corr.get("agent_id"),
+            duration_ms=duration_ms,
+            tokens={
+                "prompt": int(usage.get("prompt_tokens", 0)),
+                "completion": int(usage.get("completion_tokens", 0)),
+                "total": int(usage.get("total_tokens", 0)),
+            },
+            status="success",
+        )
+    except Exception as e:
+        duration_ms = int((time.perf_counter() - start_perf) * 1000)
+        log_event(
+            "llm_call_end",
+            provider=provider,
+            model=model,
+            backend=backend,
+            run_id=corr.get("run_id"),
+            agent_id=corr.get("agent_id"),
+            duration_ms=duration_ms,
+            status="error",
+            error_type=type(e).__name__,
+            error=str(e),
+        )
+        raise
+
+
+@asynccontextmanager
+async def observe_tool_call(
+    *,
+    correlation: dict[str, Any] | None = None,
+    server: str,
+    tool: str,
+) -> AsyncIterator[None]:
+    """Async context manager to observe a tool call."""
+    corr = correlation or {}
+    start_ms = _now_ms()
+    start_perf = time.perf_counter()
+
+    log_event(
+        "tool_call_start",
+        server=server,
+        tool=tool,
+        run_id=corr.get("run_id"),
+        agent_id=corr.get("agent_id"),
+        ts=start_ms,
+    )
+
+    try:
+        yield None
+        duration_ms = int((time.perf_counter() - start_perf) * 1000)
+        log_event(
+            "tool_call_end",
+            server=server,
+            tool=tool,
+            run_id=corr.get("run_id"),
+            agent_id=corr.get("agent_id"),
+            duration_ms=duration_ms,
+            status="success",
+        )
+    except Exception as e:
+        duration_ms = int((time.perf_counter() - start_perf) * 1000)
+        log_event(
+            "tool_call_end",
+            server=server,
+            tool=tool,
+            run_id=corr.get("run_id"),
+            agent_id=corr.get("agent_id"),
+            duration_ms=duration_ms,
+            status="error",
+            error_type=type(e).__name__,
+            error=str(e),
+        )
+        raise

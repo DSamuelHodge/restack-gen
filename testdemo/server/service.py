@@ -5,13 +5,13 @@
 import asyncio
 import logging
 from pathlib import Path
-from restack_ai import Restack
 
-from testdemo.common.settings import settings
+from restack_ai import Restack
 
 # FastMCP Tool Servers (optional)
 try:
     from testdemo.common.fastmcp_manager import start_tool_servers, stop_tool_servers
+
     FASTMCP_AVAILABLE = Path("config/tools.yaml").exists()
 except ImportError:
     FASTMCP_AVAILABLE = False
@@ -30,14 +30,14 @@ async def main() -> None:
         except Exception as e:
             logger.error(f"Failed to start tool servers: {e}")
             logger.warning("Continuing without tool servers")
-    
+
     client = Restack()
 
     try:
         # Register all workflows and functions
         await client.start_service(
-            workflows=[            ],
-            functions=[            ],
+            workflows=[],
+            functions=[],
             task_queue="testdemo",
         )
     finally:

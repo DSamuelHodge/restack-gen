@@ -7,9 +7,11 @@ Add your custom tools by decorating functions with @mcp.tool()
 
 Generated: 2025-10-26 00:27:34
 """
-from fastmcp import FastMCP
 import os
+import re
 from typing import Any
+
+from fastmcp import FastMCP
 
 # Initialize FastMCP server
 mcp = FastMCP("research_tools")
@@ -19,17 +21,17 @@ mcp = FastMCP("research_tools")
 async def web_search(query: str, max_results: int = 10) -> dict[str, Any]:
     """
     Search the web using Brave Search API
-    
+
     Args:
         query: Search query string
         max_results: Maximum number of results to return (default: 10)
-        
+
     Returns:
         Dict with search results containing:
         - results: List of search result objects
         - query: The original search query
         - count: Number of results returned
-        
+
     Example:
         results = await web_search("FastMCP Python library")
         for result in results["results"]:
@@ -38,15 +40,15 @@ async def web_search(query: str, max_results: int = 10) -> dict[str, Any]:
     # TODO: Implement web search using Brave Search API
     # Get API key from environment
     api_key = os.getenv("BRAVE_API_KEY")
-    
+
     if not api_key:
         return {
             "error": "BRAVE_API_KEY not set in environment",
             "results": [],
             "query": query,
-            "count": 0
+            "count": 0,
         }
-    
+
     # TODO: Make actual API call to Brave Search
     # This is a placeholder implementation
     return {
@@ -54,11 +56,11 @@ async def web_search(query: str, max_results: int = 10) -> dict[str, Any]:
             {
                 "title": f"Sample result for: {query}",
                 "url": "https://example.com",
-                "description": "Replace this with actual Brave Search API implementation"
+                "description": "Replace this with actual Brave Search API implementation",
             }
         ],
         "query": query,
-        "count": 1
+        "count": 1,
     }
 
 
@@ -66,22 +68,21 @@ async def web_search(query: str, max_results: int = 10) -> dict[str, Any]:
 async def extract_urls(text: str) -> list[str]:
     """
     Extract URLs from text using regex pattern matching
-    
+
     Args:
         text: Text to parse for URLs
-        
+
     Returns:
         List of extracted URLs (http and https)
-        
+
     Example:
         urls = await extract_urls("Check out https://example.com and http://test.org")
         # Returns: ["https://example.com", "http://test.org"]
     """
-    import re
-    
+
     # URL regex pattern (matches http and https)
-    url_pattern = r'https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&/=]*)'
-    
+    url_pattern = r"https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&/=]*)"
+
     urls = re.findall(url_pattern, text)
     return urls
 
@@ -90,16 +91,16 @@ async def extract_urls(text: str) -> list[str]:
 async def calculate(expression: str) -> dict[str, Any]:
     """
     Safely evaluate a mathematical expression
-    
+
     Args:
         expression: Mathematical expression to evaluate (e.g., "2 + 2", "10 * 5")
-        
+
     Returns:
         Dict with result and original expression:
         - result: The calculated result
         - expression: The original expression
         - error: Error message if evaluation failed
-        
+
     Example:
         result = await calculate("2 + 2")
         # Returns: {"result": 4.0, "expression": "2 + 2"}
@@ -111,49 +112,42 @@ async def calculate(expression: str) -> dict[str, Any]:
             return {
                 "error": "Invalid characters in expression. Only numbers and basic operators allowed.",
                 "expression": expression,
-                "result": None
+                "result": None,
             }
-        
+
         result = eval(expression, {"__builtins__": {}}, {})
-        return {
-            "result": float(result),
-            "expression": expression
-        }
+        return {"result": float(result), "expression": expression}
     except Exception as e:
-        return {
-            "error": str(e),
-            "expression": expression,
-            "result": None
-        }
+        return {"error": str(e), "expression": expression, "result": None}
 
 
 class ResearchToolServer:
     """
     FastMCP server class for Research tools
-    
+
     This class manages the lifecycle of the MCP server.
     Call run() to start the server with the specified transport.
     """
-    
+
     def __init__(self):
         self.mcp = mcp
         self.name = "research_tools"
-    
+
     async def run(self, transport: str = "stdio"):
         """
         Start the FastMCP server
-        
+
         Args:
             transport: Transport protocol to use ("stdio" or "sse")
                 - stdio: Standard input/output (for local processes)
                 - sse: Server-Sent Events over HTTP (for remote access)
         """
         await self.mcp.run(transport=transport)
-    
+
     async def health_check(self) -> bool:
         """
         Check if the server is healthy
-        
+
         Returns:
             True if server is running and responsive
         """
@@ -168,6 +162,6 @@ class ResearchToolServer:
 # For direct execution
 if __name__ == "__main__":
     import asyncio
-    
+
     server = ResearchToolServer()
     asyncio.run(server.run())
