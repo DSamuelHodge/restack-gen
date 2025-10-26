@@ -47,7 +47,7 @@ class BaseModel(BaseModelBase):  # type: ignore[misc]
             validate_assignment = True
 
     @classmethod
-    def from_yaml(cls: type["BaseModel"], path: str) -> "BaseModel":
+    def from_yaml(cls: type[BaseModel], path: str) -> BaseModel:
         """Load model from YAML file."""
         from pathlib import Path
 
@@ -75,7 +75,7 @@ class SettingsBase(SettingsBaseBase):  # type: ignore[misc]
             extra = "ignore"
 
     @classmethod
-    def from_yaml(cls: type["SettingsBase"], path: str) -> "SettingsBase":
+    def from_yaml(cls: type[SettingsBase], path: str) -> SettingsBase:
         """Load settings from YAML file."""
         from pathlib import Path
 

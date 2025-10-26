@@ -18,7 +18,7 @@ import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 import yaml
 
@@ -254,9 +254,6 @@ def check_tools(base_dir: str | Path = ".", *, verbose: bool = False) -> DoctorC
         )
     except Exception as e:
         return DoctorCheckResult("tools", "warn", "Unable to check tool servers", details=str(e))
-
-
-from typing import Any, cast
 
 
 async def _check_tools_health_async(base_dir: Path) -> dict[str, dict[str, Any]]:

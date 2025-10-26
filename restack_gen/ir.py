@@ -23,6 +23,7 @@ Example:
 """
 
 from dataclasses import dataclass
+from typing import overload
 
 
 @dataclass
@@ -133,9 +134,6 @@ class Conditional(IRNode):
         if self.false_branch:
             return f"Conditional({self.condition} ? {self.true_branch} : {self.false_branch})"
         return f"Conditional({self.condition} ? {self.true_branch})"
-
-
-from typing import overload
 
 
 @overload

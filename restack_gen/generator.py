@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from typing import Any
 
 from restack_gen.ast_service import update_service_file
 from restack_gen.codegen import generate_pipeline_code
@@ -144,9 +145,6 @@ def write_file(file_path: Path, content: str) -> None:
     file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
-
-
-from typing import Any
 
 
 def _read_yaml(file_path: Path) -> dict[str, Any]:
