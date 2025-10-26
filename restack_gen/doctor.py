@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
+import re
 import subprocess
 import sys
 from collections.abc import Iterable
@@ -20,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import httpx
 import yaml
 
 Status = Literal["ok", "warn", "fail"]
@@ -256,6 +259,187 @@ def check_tools(base_dir: str | Path = ".", *, verbose: bool = False) -> DoctorC
         return DoctorCheckResult("tools", "warn", "Unable to check tool servers", details=str(e))
 
 
+def _load_llm_config(base_dir: str | Path = ".") -> dict[str, Any] | None:
+    """Load LLM router YAML config if present.
+
+    Returns parsed dict or None if file missing/invalid.
+    """
+    path = Path(base_dir) / "config" / "llm_router.yaml"
+    if not path.exists():
+        return None
+    try:
+        with path.open(encoding="utf-8") as f:
+            return cast(dict[str, Any], yaml.safe_load(f) or {})
+    except Exception:
+        return None
+
+
+def check_llm_config(base_dir: str | Path = ".") -> DoctorCheckResult:
+    """Validate LLM router configuration and provider credentials.
+
+    Checks:
+    - config/llm_router.yaml exists and parses
+    - providers list is present and non-empty
+    - required environment variables referenced in api_key/base_url are set
+    """
+    cfg = _load_llm_config(base_dir)
+    if cfg is None:
+        return DoctorCheckResult(
+            "llm_config",
+            "warn",
+            "LLM router config not found (config/llm_router.yaml)",
+            details="Fix: run 'restack g llm-config' to scaffold default configuration.",
+        )
+
+    llm = cast(dict[str, Any] | None, cfg.get("llm"))
+    if not llm:
+        return DoctorCheckResult(
+            "llm_config",
+            "fail",
+            "config/llm_router.yaml missing 'llm' root key",
+            details="Fix: regenerate with 'restack g llm-config' or update the YAML structure.",
+        )
+
+    providers = cast(list[dict[str, Any]] | None, llm.get("providers"))
+    if not providers:
+        return DoctorCheckResult(
+            "llm_config",
+            "fail",
+            "No providers configured under llm.providers",
+            details="Fix: add at least one provider entry (e.g., OpenAI) and set its API key.",
+        )
+
+    # Scan for ${ENV_VAR} and ${ENV_VAR:-default} patterns in string fields
+    missing_env: set[str] = set()
+
+    env_pattern = re.compile(r"\$\{([A-Z0-9_]+)(?::-[^}]*)?\}")
+
+    def _collect_env_refs(obj: Any) -> None:
+        if isinstance(obj, dict):
+            for v in obj.values():
+                _collect_env_refs(v)
+        elif isinstance(obj, list):
+            for v in obj:
+                _collect_env_refs(v)
+        elif isinstance(obj, str):
+            for m in env_pattern.finditer(obj):
+                var = m.group(1)
+                if var and var not in os.environ:
+                    missing_env.add(var)
+
+    _collect_env_refs(providers)
+    _collect_env_refs(llm.get("router", {}))
+
+    if missing_env:
+        exports = "\n".join(f"  export {var}=..." for var in sorted(missing_env))
+        return DoctorCheckResult(
+            "llm_config",
+            "warn",
+            f"Missing environment variables for LLM config: {', '.join(sorted(missing_env))}",
+            details=f"Fix: set the following environment variables before running:\n{exports}",
+        )
+
+    return DoctorCheckResult("llm_config", "ok", "LLM router config and env look good")
+
+
+def check_kong_gateway(base_dir: str | Path = ".") -> DoctorCheckResult:
+    """Check Kong AI Gateway reachability if configured as backend.
+
+    Attempts a quick GET request to the configured router URL. Any HTTP status response
+    indicates basic reachability; connection/timeout errors are considered failures.
+    """
+    cfg = _load_llm_config(base_dir)
+    if cfg is None:
+        return DoctorCheckResult("kong", "ok", "Kong not checked (llm config missing)")
+
+    llm = cast(dict[str, Any] | None, cfg.get("llm")) or {}
+    router = cast(dict[str, Any] | None, llm.get("router")) or {}
+    backend = str(router.get("backend", "direct"))
+    if backend != "kong":
+        return DoctorCheckResult("kong", "ok", "Kong not configured (backend=direct)")
+
+    url = str(router.get("url", "http://localhost:8000")).rstrip("/")
+    timeout_val = float(router.get("timeout", 5))
+
+    try:
+        with httpx.Client(timeout=timeout_val) as client:
+            # A simple GET to root; any non-network error response counts as reachable
+            resp = client.get(url)
+            return DoctorCheckResult(
+                "kong",
+                "ok" if resp.status_code < 500 else "warn",
+                f"Kong reachable at {url} (status {resp.status_code})",
+            )
+    except httpx.RequestError as exc:
+        return DoctorCheckResult(
+            "kong",
+            "fail",
+            f"Kong gateway not reachable at {url}",
+            details=(
+                "Fix: ensure Kong is running and KONG_GATEWAY_URL is set.\n"
+                f"Tried GET {url} • Error: {exc}"
+            ),
+        )
+
+
+def check_prompts(base_dir: str | Path = ".") -> DoctorCheckResult:
+    """Validate prompts registry and referenced files exist.
+
+    Checks:
+    - config/prompts.yaml exists and parses
+    - Each prompt has a 'latest' version
+    - Each referenced file exists on disk
+    """
+    cfg_path = Path(base_dir) / "config" / "prompts.yaml"
+    if not cfg_path.exists():
+        return DoctorCheckResult(
+            "prompts",
+            "warn",
+            "No prompts registry found (config/prompts.yaml)",
+            details="Fix: restack g prompt MyPrompt --version 1.0.0",
+        )
+
+    try:
+        data = cast(dict[str, Any], yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {})
+    except yaml.YAMLError as e:
+        return DoctorCheckResult(
+            "prompts", "fail", "prompts.yaml contains invalid YAML", details=str(e)
+        )
+
+    prompts = cast(dict[str, Any] | None, data.get("prompts")) or {}
+    if not prompts:
+        return DoctorCheckResult("prompts", "warn", "No prompts defined in prompts.yaml")
+
+    missing_files: list[str] = []
+    missing_latest: list[str] = []
+    for name, cfg in prompts.items():
+        versions = cast(dict[str, str] | None, cfg.get("versions")) or {}
+        latest = cast(str | None, cfg.get("latest"))
+        if not latest:
+            missing_latest.append(name)
+        if versions:
+            for v, path in versions.items():
+                p = Path(path)
+                if not p.exists():
+                    missing_files.append(f"{name}@{v}: {path}")
+
+    if missing_files or missing_latest:
+        details_lines: list[str] = []
+        if missing_latest:
+            details_lines.append("Missing 'latest' for: " + ", ".join(sorted(missing_latest)))
+        if missing_files:
+            details_lines.append("Missing prompt files:\n  " + "\n  ".join(missing_files))
+        details_lines.append("Fix: create the missing files or update paths in config/prompts.yaml")
+        return DoctorCheckResult(
+            "prompts",
+            "warn",
+            "Some prompts are misconfigured or files are missing",
+            details="\n".join(details_lines),
+        )
+
+    return DoctorCheckResult("prompts", "ok", "Prompts registry is valid")
+
+
 async def _check_tools_health_async(base_dir: Path) -> dict[str, dict[str, Any]]:
     """Async helper to check tool server health.
 
@@ -322,6 +506,11 @@ def run_all_checks(
     checks.append(check_dependencies())
     checks.append(check_project_structure(base_dir))
     checks.append(check_git_status(base_dir))
+
+    # LLM and prompts configuration
+    checks.append(check_llm_config(base_dir))
+    checks.append(check_kong_gateway(base_dir))
+    checks.append(check_prompts(base_dir))
 
     if check_tools_flag:
         checks.append(check_tools(base_dir, verbose=verbose))
