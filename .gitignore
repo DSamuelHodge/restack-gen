@@ -140,3 +140,6 @@ jira.env
 jira_*.env
 .jira/
 setup_jira_integration.local.*
+
+# Local developer notes folder (do not commit)
+/developer/

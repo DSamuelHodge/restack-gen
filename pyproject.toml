@@ -8,7 +8,7 @@ version = "2.0.0"
 description = "Rails-style scaffolding CLI for Restack agents, workflows, and pipelines with LLM + Tools"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 authors = [
     {name = "Restack Team", email = "team@restack.io"},
 ]
@@ -16,7 +16,7 @@ keywords = ["restack", "agents", "workflows", "scaffolding", "cli", "code-genera
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
