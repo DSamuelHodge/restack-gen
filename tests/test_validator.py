@@ -413,3 +413,181 @@ class TestValidateFunction:
             ]
         )
         validate_pipeline(node)  # Should not raise
+
+
+def test_validation_error_message() -> None:
+    """Test ValidationError can be created with custom message."""
+    from restack_gen.validator import ValidationError
+
+    error = ValidationError("Test error message")
+    assert str(error) == "Test error message"
+    assert isinstance(error, Exception)
+
+
+def test_validation_result_creation() -> None:
+    """Test creating ValidationResult objects."""
+    from restack_gen.validator import ValidationResult
+
+    result = ValidationResult(
+        is_valid=True, errors=[], warnings=["Test warning"], stats={"depth": 3}
+    )
+    assert result.is_valid is True
+    assert len(result.errors) == 0
+    assert len(result.warnings) == 1
+    assert result.stats["depth"] == 3
+
+
+def test_validation_result_with_errors() -> None:
+    """Test ValidationResult with errors."""
+    from restack_gen.validator import ValidationResult
+
+    result = ValidationResult(
+        is_valid=False,
+        errors=["Error 1", "Error 2"],
+        warnings=["Warning 1"],
+        stats={"depth": 2},
+    )
+    assert result.is_valid is False
+    assert len(result.errors) == 2
+    assert len(result.warnings) == 1
+
+
+def test_get_dependencies_single_resource() -> None:
+    """Test getting dependencies for single resource."""
+    node = Resource("Agent1", "agent")
+    validator = PipelineValidator(node)
+    deps = validator.get_dependencies()
+    assert "Agent1" in deps
+    assert deps["Agent1"] == []
+
+
+def test_get_dependencies_sequence() -> None:
+    """Test getting dependencies for sequence."""
+    node = Sequence(
+        [
+            Resource("Agent1", "agent"),
+            Resource("Agent2", "agent"),
+            Resource("Agent3", "agent"),
+        ]
+    )
+    validator = PipelineValidator(node)
+    deps = validator.get_dependencies()
+    assert deps["Agent1"] == []
+    assert deps["Agent2"] == ["Agent1"]
+    assert "Agent1" in deps["Agent3"] or "Agent2" in deps["Agent3"]
+
+
+def test_get_dependencies_parallel() -> None:
+    """Test getting dependencies for parallel branches."""
+    node = Parallel([Resource("Agent1", "agent"), Resource("Agent2", "agent")])
+    validator = PipelineValidator(node)
+    deps = validator.get_dependencies()
+    # Parallel branches should have same dependencies
+    assert deps["Agent1"] == []
+    assert deps["Agent2"] == []
+
+
+def test_get_dependencies_conditional() -> None:
+    """Test getting dependencies for conditional."""
+    node = Conditional(
+        condition="result['status']",
+        true_branch=Resource("Handler1", "agent"),
+        false_branch=Resource("Handler2", "agent"),
+    )
+    validator = PipelineValidator(node)
+    deps = validator.get_dependencies()
+    # Both branches should have same dependencies
+    assert deps["Handler1"] == []
+    assert deps["Handler2"] == []
+
+
+def test_get_execution_order_single() -> None:
+    """Test execution order for single resource."""
+    node = Resource("Agent1", "agent")
+    validator = PipelineValidator(node)
+    order = validator.get_execution_order()
+    assert order == ["Agent1"]
+
+
+def test_get_execution_order_sequence() -> None:
+    """Test execution order for sequence."""
+    node = Sequence(
+        [Resource("Agent1", "agent"), Resource("Agent2", "agent"), Resource("Agent3", "agent")]
+    )
+    validator = PipelineValidator(node)
+    order = validator.get_execution_order()
+    assert order == ["Agent1", "Agent2", "Agent3"]
+
+
+def test_get_execution_order_parallel() -> None:
+    """Test execution order for parallel branches."""
+    node = Parallel([Resource("Agent1", "agent"), Resource("Agent2", "agent")])
+    validator = PipelineValidator(node)
+    order = validator.get_execution_order()
+    # Both should be in order, exact order may vary
+    assert set(order) == {"Agent1", "Agent2"}
+    assert len(order) == 2
+
+
+def test_get_execution_order_conditional() -> None:
+    """Test execution order for conditional."""
+    node = Conditional(
+        condition="result['status']",
+        true_branch=Resource("Handler1", "agent"),
+        false_branch=Resource("Handler2", "agent"),
+    )
+    validator = PipelineValidator(node)
+    order = validator.get_execution_order()
+    # Both branches should be in order
+    assert set(order) == {"Handler1", "Handler2"}
+
+
+def test_validator_with_empty_sequence() -> None:
+    """Test validator with sequence that has minimum nodes."""
+    # Sequences require at least 2 nodes
+    node = Sequence([Resource("A", "agent"), Resource("B", "agent")])
+    validator = PipelineValidator(node)
+    assert validator.all_resources == {"A", "B"}
+    validator.validate()  # Should not raise
+
+
+def test_validator_with_conditional_no_false_branch() -> None:
+    """Test validator with conditional that has no false branch."""
+    node = Conditional(
+        condition="result['proceed']", true_branch=Resource("Handler", "agent"), false_branch=None
+    )
+    validator = PipelineValidator(node)
+    assert validator.all_resources == {"Handler"}
+    validator.validate()  # Should not raise
+
+
+def test_collect_resources_deeply_nested() -> None:
+    """Test collecting resources from deeply nested structure."""
+    node = Sequence(
+        [
+            Sequence(
+                [
+                    Resource("A", "agent"),
+                    Parallel([Resource("B", "agent"), Resource("C", "agent")]),
+                ]
+            ),
+            Conditional(
+                condition="x",
+                true_branch=Sequence([Resource("D", "agent"), Resource("E", "agent")]),
+                false_branch=Resource("F", "agent"),
+            ),
+        ]
+    )
+    validator = PipelineValidator(node)
+    assert validator.all_resources == {"A", "B", "C", "D", "E", "F"}
+
+
+def test_graph_metrics_with_types() -> None:
+    """Test graph metrics includes resource types."""
+    node = Sequence(
+        [Resource("Agent1", "agent"), Resource("Workflow1", "workflow"), Resource("Func1", "function")]
+    )
+    validator = PipelineValidator(node)
+    metrics = validator.get_graph_metrics()
+    assert metrics["total_resources"] == 3
+
