@@ -13,7 +13,7 @@ Public API:
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 from restack_gen.ir import Conditional, IRNode, Parallel, Resource, Sequence
 
@@ -36,9 +36,9 @@ class ValidationResult:
     """
 
     is_valid: bool
-    errors: List[str]
-    warnings: List[str]
-    stats: Dict[str, Any]
+    errors: list[str]
+    warnings: list[str]
+    stats: dict[str, Any]
 
 
 class PipelineValidator:
@@ -173,9 +173,7 @@ class PipelineValidator:
 
         unreachable = self.all_resources - reachable
         if unreachable:
-            raise ValidationError(
-                f"Unreachable nodes detected: {', '.join(sorted(unreachable))}"
-            )
+            raise ValidationError(f"Unreachable nodes detected: {', '.join(sorted(unreachable))}")
 
     def get_execution_order(self) -> list[str]:
         """
@@ -334,13 +332,21 @@ def validate_pipeline(root: IRNode, strict: bool = False) -> ValidationResult:
     conditional_branches = stats.get("conditional_branches", 0)
 
     if max_depth > 5:
-        warnings.append(f"Pipeline depth is high ({max_depth}); consider simplifying nested structures.")
+        warnings.append(
+            f"Pipeline depth is high ({max_depth}); consider simplifying nested structures."
+        )
     if total_resources > 20:
-        warnings.append(f"Pipeline uses many resources ({total_resources}); consider splitting into sub-pipelines.")
+        warnings.append(
+            f"Pipeline uses many resources ({total_resources}); consider splitting into sub-pipelines."
+        )
     if parallel_sections > 10:
-        warnings.append(f"Pipeline has many parallel sections ({parallel_sections}); monitor concurrency and resource usage.")
+        warnings.append(
+            f"Pipeline has many parallel sections ({parallel_sections}); monitor concurrency and resource usage."
+        )
     if conditional_branches > 10:
-        warnings.append(f"Pipeline has many conditional branches ({conditional_branches}); complexity may be high.")
+        warnings.append(
+            f"Pipeline has many conditional branches ({conditional_branches}); complexity may be high."
+        )
 
     # Strict mode: promote warnings to errors in the returned result
     promoted_errors = list(errors)

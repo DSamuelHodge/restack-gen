@@ -66,9 +66,7 @@ class TestCollectResources:
 
     def test_parallel_resources(self):
         """Test collecting from Parallel."""
-        par = Parallel(
-            [Resource("Agent1", "agent"), Resource("Agent2", "agent")]
-        )
+        par = Parallel([Resource("Agent1", "agent"), Resource("Agent2", "agent")])
         resources = _collect_resources(par)
         assert len(resources) == 2
 
@@ -114,7 +112,9 @@ class TestGenerateImports:
         imports = generate_imports(ir, "myproject")
 
         assert "from agents.data_collector import data_collector_activity" in imports
-        assert "from workflows.process_workflow_workflow import process_workflow_activity" in imports
+        assert (
+            "from workflows.process_workflow_workflow import process_workflow_activity" in imports
+        )
         assert "from functions.transform_data import transform_data_activity" in imports
 
     def test_duplicate_resources(self):
@@ -348,9 +348,7 @@ class TestCodeValidation:
         """Test that conditional code is syntactically valid."""
         ir = Conditional(
             condition="should_process",
-            true_branch=Sequence(
-                [Resource("A", "agent"), Resource("B", "agent")]
-            ),
+            true_branch=Sequence([Resource("A", "agent"), Resource("B", "agent")]),
             false_branch=Resource("C", "agent"),
         )
         code = generate_pipeline_code(ir, "ConditionalPipeline", "testproject")

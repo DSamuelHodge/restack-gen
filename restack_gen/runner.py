@@ -6,7 +6,6 @@ with proper environment setup and graceful shutdown handling.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import signal
 import subprocess

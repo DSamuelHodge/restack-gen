@@ -1,14 +1,13 @@
 """Tests for AST-based service.py manipulation."""
 
 import ast
+
 import pytest
-from pathlib import Path
 
 from restack_gen.ast_service import (
     add_import,
     add_to_list_in_source,
     has_import,
-    parse_service_file,
     update_service_file,
 )
 from restack_gen.project import create_new_project

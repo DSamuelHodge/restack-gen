@@ -6,12 +6,12 @@ This module sets up and registers all agents and workflows.
 
 from restack_ai import Restack
 
+from email_pipeline.agents.business_handler import business_handler_activity
+from email_pipeline.agents.email_router import email_router_activity
 from email_pipeline.agents.email_validator import email_validator_activity
+from email_pipeline.agents.personal_handler import personal_handler_activity
 from email_pipeline.agents.spam_checker import spam_checker_activity
 from email_pipeline.agents.virus_scanner import virus_scanner_activity
-from email_pipeline.agents.email_router import email_router_activity
-from email_pipeline.agents.personal_handler import personal_handler_activity
-from email_pipeline.agents.business_handler import business_handler_activity
 from email_pipeline.workflows.email_pipeline_workflow import EmailPipelineWorkflow
 
 

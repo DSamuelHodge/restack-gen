@@ -5,11 +5,10 @@ DataPipelineWorkflow workflow.
 Auto-generated pipeline from operator expression: DataFetcher → DataProcessor → DataSaver
 """
 
-from restack_ai import Workflow, step
-
 from data_pipeline.agents.data_fetcher import data_fetcher_activity
 from data_pipeline.agents.data_processor import data_processor_activity
 from data_pipeline.agents.data_saver import data_saver_activity
+from restack_ai import Workflow, step
 
 
 class DataPipelineWorkflow(Workflow):

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -83,9 +82,7 @@ ANOTHER_VALID=123
 
 @patch("restack_gen.runner.subprocess.Popen")
 @patch("restack_gen.runner.signal.signal")
-def test_start_service_basic(
-    mock_signal: MagicMock, mock_popen: MagicMock, tmp_path: Path
-) -> None:
+def test_start_service_basic(mock_signal: MagicMock, mock_popen: MagicMock, tmp_path: Path) -> None:
     """Test starting service with basic configuration."""
     # Setup
     server_dir = tmp_path / "server"

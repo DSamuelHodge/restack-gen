@@ -131,7 +131,7 @@ class Conditional(IRNode):
     def __str__(self) -> str:
         """Return readable string representation."""
         if self.false_branch:
-            return f"Conditional({self.condition} ? " f"{self.true_branch} : {self.false_branch})"
+            return f"Conditional({self.condition} ? {self.true_branch} : {self.false_branch})"
         return f"Conditional({self.condition} ? {self.true_branch})"
 
 

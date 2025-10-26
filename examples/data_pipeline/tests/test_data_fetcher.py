@@ -1,7 +1,6 @@
 """Tests for DataFetcher agent."""
 
 import pytest
-
 from data_pipeline.agents.data_fetcher import data_fetcher_activity
 
 

@@ -1,7 +1,6 @@
 """Tests for DataPipelineWorkflow."""
 
 import pytest
-
 from data_pipeline.workflows.data_pipeline_workflow import DataPipelineWorkflow
 
 

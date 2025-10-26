@@ -165,8 +165,9 @@ def _read_yaml(file_path: Path) -> dict:
 
 def _write_yaml(file_path: Path, data: dict) -> None:
     """Write a dict to YAML file with safe formatting."""
-    import yaml
     import re
+
+    import yaml
 
     # Use a custom dumper that quotes only semver-like strings and prompt file paths
     class SemverQuotedDumper(yaml.SafeDumper):
@@ -481,17 +482,18 @@ def generate_pipeline(
         from restack_gen.validator import validate_pipeline
 
         validation = validate_pipeline(ir, strict=False)
-        
+
         if not validation.is_valid:
             error_details = "\n  - ".join(validation.errors)
             raise GenerationError(f"Pipeline validation failed:\n  - {error_details}")
-        
+
         # Show warnings if any
         if validation.warnings:
             import warnings
+
             for warning in validation.warnings:
                 warnings.warn(warning, UserWarning, stacklevel=2)
-                
+
     except GenerationError:
         raise
     except Exception as e:
@@ -504,7 +506,9 @@ def generate_pipeline(
         pipeline_name += "Workflow"
 
     # Define file paths
-    workflow_file = project_root / "src" / project_name / "workflows" / f"{workflow_name}_workflow.py"
+    workflow_file = (
+        project_root / "src" / project_name / "workflows" / f"{workflow_name}_workflow.py"
+    )
     test_file = project_root / "tests" / f"test_{workflow_name}_workflow.py"
     service_file = project_root / "server" / "service.py"
 
@@ -578,11 +582,9 @@ def generate_llm_config(
         raise GenerationError(
             f"Config file {config_file} already exists. Use --force to overwrite."
         )
-    
+
     if llm_router_file.exists() and not force:
-        raise GenerationError(
-            f"File {llm_router_file} already exists. Use --force to overwrite."
-        )
+        raise GenerationError(f"File {llm_router_file} already exists. Use --force to overwrite.")
 
     # Prepare context
     context = {
@@ -657,8 +659,8 @@ def generate_prompt(
     # Ensure prompt loader exists (generate if missing)
     loader_generated = False
     if not loader_file.exists():
-        from importlib.metadata import version as _pkg_version
         import datetime as _dt
+        from importlib.metadata import version as _pkg_version
 
         try:
             gen_version = _pkg_version("restack-gen")
@@ -705,6 +707,7 @@ def generate_prompt(
     # Add/overwrite mapping for version to file path
     rel_path = f"prompts/{prompt_key}/v{version}.md"
     entry.setdefault("versions", {})[version] = rel_path
+
     # Update 'latest' if the incoming version is greater (lexicographic fallback to simple semver compare)
     def _parse(v: str) -> tuple[int, int, int]:
         try:
@@ -790,6 +793,7 @@ def generate_tool_server(
 
     # Prepare context
     import datetime
+
     context = {
         "name": class_name,
         "project_name": project_name,
@@ -807,7 +811,7 @@ def generate_tool_server(
     if config_file.exists() and not force:
         # Config exists, don't overwrite
         print(f"Config file {config_file} already exists. Skipping config generation.")
-        print(f"Add this server manually to your tools.yaml configuration.")
+        print("Add this server manually to your tools.yaml configuration.")
     else:
         config_content = render_template("tools.yaml.j2", context)
         write_file(config_file, config_content)
@@ -821,10 +825,11 @@ def generate_tool_server(
     if not manager_file.exists():
         try:
             from importlib.metadata import version
+
             gen_version = version("restack-gen")
         except Exception:
             gen_version = "unknown"
-        
+
         manager_context = {
             "version": gen_version,
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

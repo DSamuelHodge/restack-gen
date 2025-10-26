@@ -27,7 +27,7 @@ async def main():
         run_id=run_id,
     )
 
-    print(f"\nWorkflow completed!")
+    print("\nWorkflow completed!")
     print(f"Final result: {result}")
 
 

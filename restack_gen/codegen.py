@@ -4,8 +4,6 @@ This module provides functions to generate Restack workflow pipeline code
 from the Intermediate Representation (IR) tree created by the parser.
 """
 
-from typing import Any
-
 from restack_gen.ir import Conditional, IRNode, Parallel, Resource, Sequence
 
 
@@ -247,7 +245,9 @@ def generate_parallel_code(parallel: Parallel, indent: int = 0, result_var: str 
         return code
 
 
-def generate_conditional_code(conditional: Conditional, indent: int = 0, result_var: str = "result") -> str:
+def generate_conditional_code(
+    conditional: Conditional, indent: int = 0, result_var: str = "result"
+) -> str:
     """
     Generate code for a Conditional node (branching).
 
@@ -267,7 +267,6 @@ def generate_conditional_code(conditional: Conditional, indent: int = 0, result_
                 result = await self.execute_activity(c_activity, result)
     """
     spaces = " " * (indent * 4)
-    inner_spaces = " " * ((indent + 1) * 4)
 
     code = ""
 
@@ -275,7 +274,7 @@ def generate_conditional_code(conditional: Conditional, indent: int = 0, result_
     # The condition is a key in the result dictionary
     code += f"{spaces}if {result_var}.get('{conditional.condition}'):\n"
     code += _generate_node_code(conditional.true_branch, indent + 1, result_var)
-    
+
     if conditional.false_branch:
         code += f"{spaces}else:\n"
         code += _generate_node_code(conditional.false_branch, indent + 1, result_var)

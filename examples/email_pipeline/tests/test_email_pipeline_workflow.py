@@ -1,7 +1,6 @@
 """Tests for EmailPipelineWorkflow integration."""
 
 import pytest
-
 from email_pipeline.workflows.email_pipeline_workflow import EmailPipelineWorkflow
 
 

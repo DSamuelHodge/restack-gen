@@ -9,19 +9,19 @@ import typer
 from rich.console import Console
 
 from restack_gen import __version__
+from restack_gen import doctor as doctor_mod
+from restack_gen import runner as runner_mod
 from restack_gen.generator import (
     GenerationError,
     generate_agent,
     generate_function,
     generate_llm_config,
-    generate_prompt,
     generate_pipeline,
+    generate_prompt,
     generate_tool_server,
     generate_workflow,
 )
 from restack_gen.project import create_new_project
-from restack_gen import doctor as doctor_mod
-from restack_gen import runner as runner_mod
 
 app = typer.Typer(
     name="restack",
@@ -99,19 +99,23 @@ def new(
 @app.command(name="g")
 def generate(
     resource_type: Annotated[
-        str, typer.Argument(help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, or prompt")
+        str,
+        typer.Argument(
+            help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, or prompt"
+        ),
     ],
     name: Annotated[str | None, typer.Argument(help="Name of the resource to generate")] = None,
     force: Annotated[bool, typer.Option("--force", help="Overwrite existing files")] = False,
     operators: Annotated[
-        str | None, typer.Option("--operators", "-o", help="Operator expression for pipeline (e.g., 'A → B ⇄ C')")
+        str | None,
+        typer.Option(
+            "--operators", "-o", help="Operator expression for pipeline (e.g., 'A → B ⇄ C')"
+        ),
     ] = None,
     backend: Annotated[
         str, typer.Option("--backend", help="Backend type for llm-config (direct or kong)")
     ] = "direct",
-    version: Annotated[
-        str, typer.Option("--version", help="Prompt version (semver)")
-    ] = "1.0.0",
+    version: Annotated[str, typer.Option("--version", help="Prompt version (semver)")] = "1.0.0",
 ) -> None:
     """
     Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, or prompt).
@@ -129,7 +133,7 @@ def generate(
     try:
         if resource_type == "llm-config":
             files = generate_llm_config(force=force, backend=backend)
-            console.print(f"[green]✓[/green] Generated LLM router configuration")
+            console.print("[green]✓[/green] Generated LLM router configuration")
             console.print(f"  Config: {files['config']}")
             console.print(f"  Router: {files['router']}")
             console.print("\n[bold cyan]Next steps:[/bold cyan]")
@@ -180,9 +184,11 @@ def generate(
         elif resource_type == "pipeline":
             if not operators:
                 console.print("[red]Error:[/red] Pipeline generation requires --operators option")
-                console.print("Example: restack g pipeline DataPipeline --operators \"Fetch → Process\"")
+                console.print(
+                    'Example: restack g pipeline DataPipeline --operators "Fetch → Process"'
+                )
                 raise typer.Exit(1)
-            
+
             files = generate_pipeline(name, operators, force=force)
             console.print(f"[green]✓[/green] Generated pipeline: [bold]{name}[/bold]")
             console.print(f"  Workflow: {files['workflow']}")
@@ -198,13 +204,13 @@ def generate(
             files = generate_tool_server(name, force=force)
             console.print(f"[green]✓[/green] Generated FastMCP tool server: [bold]{name}[/bold]")
             console.print(f"  Server: {files['server']}")
-            if files.get('config'):
+            if files.get("config"):
                 console.print(f"  Config: {files['config']}")
             console.print("\n[bold cyan]Next steps:[/bold cyan]")
             console.print("  1. Implement your custom tools in the generated file")
             console.print("  2. Set environment variables (e.g., BRAVE_API_KEY)")
             console.print("  3. Test server: python -m pytest")
-            console.print("  4. Run server: python " + str(files['server']))
+            console.print("  4. Run server: python " + str(files["server"]))
 
         elif resource_type == "prompt":
             files = generate_prompt(name, version=version, force=force)
@@ -216,11 +222,15 @@ def generate(
             console.print("\n[bold cyan]Next steps:[/bold cyan]")
             console.print("  1. Edit the markdown template to fit your use case")
             console.print("  2. Load prompts via PromptLoader in your agents")
-            console.print("  3. Add more versions with --version and update 'latest' if appropriate")
+            console.print(
+                "  3. Add more versions with --version and update 'latest' if appropriate"
+            )
 
         else:
             console.print(f"[red]Error:[/red] Unknown resource type: {resource_type}")
-            console.print("Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt")
+            console.print(
+                "Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt"
+            )
             raise typer.Exit(1)
 
     except GenerationError as e:
@@ -242,7 +252,7 @@ def run_server(
         restack run:server --config config/prod.yaml
     """
     try:
-        console.print(f"[cyan]Starting Restack service...[/cyan]")
+        console.print("[cyan]Starting Restack service...[/cyan]")
         runner_mod.start_service(config_path=config)
     except runner_mod.RunnerError as e:
         console.print(f"[red]Error:[/red] {e}", style="red")
@@ -252,7 +262,9 @@ def run_server(
 @app.command()
 def doctor(
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed output")] = False,
-    check_tools: Annotated[bool, typer.Option("--check-tools", help="Check FastMCP tool servers")] = False,
+    check_tools: Annotated[
+        bool, typer.Option("--check-tools", help="Check FastMCP tool servers")
+    ] = False,
 ) -> None:
     """
     Check environment, configuration, dependencies, and connectivity.

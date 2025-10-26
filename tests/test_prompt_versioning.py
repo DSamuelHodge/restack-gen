@@ -1,13 +1,13 @@
 """Tests for prompt registry and versioning (PR #5)."""
 
-from pathlib import Path
-import sys
 import importlib
+import sys
+from pathlib import Path
 
 import pytest
 
+from restack_gen.generator import GenerationError, generate_prompt
 from restack_gen.project import create_new_project
-from restack_gen.generator import generate_prompt, GenerationError
 
 
 class TestPromptVersioning:
@@ -45,8 +45,8 @@ class TestPromptVersioning:
         assert "prompts:" in text
         assert "analyze_research:" in text
         assert "versions:" in text
-        assert "\"1.0.0\": \"prompts/analyze_research/v1.0.0.md\"" in text
-        assert "latest: \"1.0.0\"" in text
+        assert '"1.0.0": "prompts/analyze_research/v1.0.0.md"' in text
+        assert 'latest: "1.0.0"' in text
 
     @pytest.mark.asyncio
     async def test_prompt_loader_resolves_versions(self, temp_project):
@@ -56,7 +56,7 @@ class TestPromptVersioning:
 
         pkg = self._add_src_to_path(temp_project)
         loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
-        PromptLoader = getattr(loader_mod, "PromptLoader")
+        PromptLoader = loader_mod.PromptLoader
 
         loader = PromptLoader("config/prompts.yaml")
         # Latest

@@ -1,16 +1,10 @@
 """Tests for operator expression parser."""
 
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from restack_gen.ir import Parallel, Resource, Sequence
 from restack_gen.parser import (
     ParseError,
-    Parser,
-    Token,
     TokenType,
     get_project_resources,
     parse,
