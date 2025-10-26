@@ -1,6 +1,7 @@
 """
 Client script to run the PromptedPipelineWorkflow.
 """
+
 import asyncio
 
 from restack_ai import Restack

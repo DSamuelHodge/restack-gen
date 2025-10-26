@@ -1,6 +1,7 @@
 """
 Client script to run the ResearchWorkflow.
 """
+
 import asyncio
 
 from restack_ai import Restack

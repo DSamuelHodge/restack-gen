@@ -53,6 +53,14 @@ llm:
     #   base_url: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
     #   api_key: "${ANTHROPIC_API_KEY}"
     #   priority: 2
+
+    # Uncomment to add Google Gemini provider
+    # - name: "gemini-alt"
+    #   type: "gemini"
+    #   model: "gemini-2.5-flash"
+    #   base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}"
+    #   api_key: "${GEMINI_API_KEY}"
+    #   priority: 3
       
   fallback:
     conditions:

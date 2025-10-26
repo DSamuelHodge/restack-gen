@@ -4,6 +4,7 @@ This workflow will:
 - call a `web_search` tool (via FastMCP when configured, or a fake client)
 - summarize the results with an LLM (real router if present, else a fake)
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -28,7 +29,8 @@ class ResearchWorkflow(Workflow):
         messages = [
             {
                 "role": "user",
-                "content": f"Summarize the following results for: {query}\n" + str(search.get("results", [])),
+                "content": f"Summarize the following results for: {query}\n"
+                + str(search.get("results", [])),
             }
         ]
         llm_resp = await router.chat({"messages": messages})

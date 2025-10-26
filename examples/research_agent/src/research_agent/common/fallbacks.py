@@ -2,6 +2,7 @@
 
 These allow the example to run entirely offline.
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -65,6 +66,7 @@ def get_llm_router():
     """Return real LLMRouter if available, else a fake one."""
     try:
         from research_agent.common.llm_router import LLMRouter  # type: ignore
+
         return LLMRouter()
     except Exception:
         return FakeLLMRouter()

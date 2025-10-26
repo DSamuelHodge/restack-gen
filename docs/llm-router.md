@@ -25,6 +25,7 @@ Set your API keys:
 ```bash
 export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
+export GEMINI_API_KEY=AIza-...
 ```
 
 ### Provider Configuration
@@ -51,6 +52,13 @@ llm:
       base_url: "${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
       api_key: "${ANTHROPIC_API_KEY}"
       priority: 2
+
+    - name: "gemini-alt"
+      type: "gemini"
+      model: "gemini-2.5-flash"
+      base_url: "${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com}"
+      api_key: "${GEMINI_API_KEY}"
+      priority: 3
   
   fallback:
     conditions:
@@ -162,6 +170,18 @@ Supports Claude models:
 - `claude-3-5-haiku-20241022`
 - Other Claude 3.x models
 
+### Google Gemini
+
+Supports Gemini models via the Google AI for Developers API:
+- `gemini-2.5-flash`
+- `gemini-2.0-pro-exp-02-05` and other available SKUs
+
+Notes:
+- Set `GEMINI_API_KEY` in your environment.
+- Default base URL is `https://generativelanguage.googleapis.com`.
+- System prompts are passed via `system_instruction` when present.
+- The router prefers the official SDK (`from google import genai`) when installed; otherwise it falls back to the REST API.
+
 ## Backend Options
 
 ### Direct
@@ -247,6 +267,7 @@ Route through Kong AI Gateway for enterprise features.
 **Kong Routes:**
 - OpenAI: `POST {KONG_URL}/ai/openai`
 - Anthropic: `POST {KONG_URL}/ai/anthropic`
+- Gemini: `POST {KONG_URL}/ai/gemini`
 
 **Response Metadata:**
 ```python

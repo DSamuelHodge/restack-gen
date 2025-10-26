@@ -3,6 +3,7 @@
 It reads config/prompts.yaml and returns the file content for the latest
 version of the requested prompt.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

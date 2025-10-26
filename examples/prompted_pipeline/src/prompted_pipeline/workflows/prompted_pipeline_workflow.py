@@ -3,6 +3,7 @@
 This workflow loads a prompt and runs a simple multi-step process using the
 operator grammar idea (sequential steps), while demonstrating prompt loading.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -25,7 +26,9 @@ class PromptedPipelineWorkflow(Workflow):
         chunks = [text[i : i + 120] for i in range(0, len(text), 120)] or [text]
 
         # Step 2: Summarize each chunk (simulated)
-        summaries = [f"{prompt}\n{c[:100]}..." if len(c) > 100 else f"{prompt}\n{c}" for c in chunks]
+        summaries = [
+            f"{prompt}\n{c[:100]}..." if len(c) > 100 else f"{prompt}\n{c}" for c in chunks
+        ]
 
         # Step 3: Merge summaries (simulated)
         merged = "\n---\n".join(summaries)
