@@ -1,0 +1,385 @@
+"""Tests for prompt registry and versioning (PR #5)."""
+
+import importlib
+import sys
+from pathlib import Path
+
+import pytest
+
+from restack_gen.generator import GenerationError, generate_prompt
+from restack_gen.project import create_new_project
+
+
+class TestPromptVersioning:
+    @pytest.fixture
+    def temp_project(self, tmp_path, monkeypatch):
+        project_path = tmp_path / "testapp"
+        create_new_project("testapp", parent_dir=tmp_path, force=False)
+        monkeypatch.chdir(project_path)
+        return project_path
+
+    def _add_src_to_path(self, project_path: Path):
+        pkg = project_path.name
+        src_path = project_path / "src"
+        # Prepend project src for import resolution
+        if str(src_path) not in sys.path:
+            sys.path.insert(0, str(src_path))
+        # Avoid cross-test package caching (other tests also use 'testapp')
+        for mod in list(sys.modules.keys()):
+            if mod == pkg or mod.startswith(f"{pkg}."):
+                sys.modules.pop(mod, None)
+        return pkg
+
+    def test_generate_prompt_creates_files_and_registry(self, temp_project):
+        files = generate_prompt("AnalyzeResearch", version="1.0.0", force=True)
+        assert files["prompt"].exists()
+        assert files["config"].exists()
+        # first call should generate loader
+        assert files["loader"] is not None
+
+        # Path correctness
+        assert files["prompt"].as_posix().endswith("prompts/analyze_research/v1.0.0.md")
+
+        # Registry content
+        text = files["config"].read_text()
+        assert "prompts:" in text
+        assert "analyze_research:" in text
+        assert "versions:" in text
+        assert '"1.0.0": "prompts/analyze_research/v1.0.0.md"' in text
+        assert 'latest: "1.0.0"' in text
+
+    @pytest.mark.asyncio
+    async def test_prompt_loader_resolves_versions(self, temp_project):
+        # Create multiple versions
+        generate_prompt("AnalyzeResearch", version="1.0.0", force=True)
+        generate_prompt("AnalyzeResearch", version="1.2.3", force=True)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+        # Latest
+        tpl_latest = await loader.load("analyze_research")
+        assert tpl_latest.version in {"1.0.0", "1.2.3"}
+        # Exact
+        tpl_exact = await loader.load("analyze_research", "1.0.0")
+        assert tpl_exact.version == "1.0.0"
+        # Prefix '1' -> highest 1.x.x
+        tpl_major = await loader.load("analyze_research", "1")
+        assert tpl_major.version == "1.2.3"
+        # Prefix '1.2' -> highest 1.2.x
+        tpl_minor = await loader.load("analyze_research", "1.2")
+        assert tpl_minor.version == "1.2.3"
+
+    def test_generate_prompt_outside_project_fails(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(GenerationError):
+            generate_prompt("Research", version="1.0.0")
+
+    def test_generate_prompt_refuses_overwrite_without_force(self, temp_project):
+        files = generate_prompt("Research", version="1.0.0", force=True)
+        assert files["prompt"].exists()
+        with pytest.raises(GenerationError):
+            generate_prompt("Research", version="1.0.0", force=False)
+
+
+class TestPromptLoaderAdvanced:
+    """Advanced tests for PromptLoader functionality."""
+
+    @pytest.fixture
+    def temp_project(self, tmp_path, monkeypatch):
+        project_path = tmp_path / "testapp"
+        create_new_project("testapp", parent_dir=tmp_path, force=False)
+        monkeypatch.chdir(project_path)
+        return project_path
+
+    def _add_src_to_path(self, project_path: Path):
+        pkg = project_path.name
+        src_path = project_path / "src"
+        if str(src_path) not in sys.path:
+            sys.path.insert(0, str(src_path))
+        for mod in list(sys.modules.keys()):
+            if mod == pkg or mod.startswith(f"{pkg}."):
+                sys.modules.pop(mod, None)
+        return pkg
+
+    @pytest.mark.asyncio
+    async def test_prompt_not_found_raises_error(self, temp_project):
+        """Test that loading non-existent prompt raises ValueError."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        with pytest.raises(ValueError, match="not found in registry"):
+            await loader.load("nonexistent_prompt")
+
+    @pytest.mark.asyncio
+    async def test_version_not_mapped_raises_error(self, temp_project):
+        """Test that requesting unmapped version raises ValueError."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        with pytest.raises(ValueError, match="not mapped to a file"):
+            await loader.load("research", "99.99.99")
+
+    @pytest.mark.asyncio
+    async def test_prompt_file_not_found_raises_error(self, temp_project):
+        """Test that missing prompt file raises FileNotFoundError."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        # Manually add a version that points to non-existent file
+        config_path = temp_project / "config" / "prompts.yaml"
+        import yaml
+
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+
+        config["prompts"]["research"]["versions"]["2.0.0"] = "prompts/research/missing.md"
+
+        with open(config_path, "w") as f:
+            yaml.safe_dump(config, f)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        with pytest.raises(FileNotFoundError, match="not found"):
+            await loader.load("research", "2.0.0")
+
+    @pytest.mark.asyncio
+    async def test_no_latest_configured_raises_error(self, temp_project):
+        """Test that missing 'latest' raises ValueError."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        # Remove 'latest' from config
+        config_path = temp_project / "config" / "prompts.yaml"
+        import yaml
+
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+
+        del config["prompts"]["research"]["latest"]
+
+        with open(config_path, "w") as f:
+            yaml.safe_dump(config, f)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        with pytest.raises(ValueError, match="No 'latest' configured"):
+            await loader.load("research")
+
+    @pytest.mark.asyncio
+    async def test_exact_resolution_mode(self, temp_project):
+        """Test exact version resolution mode."""
+        generate_prompt("Research", version="1.0.0", force=True)
+        generate_prompt("Research", version="1.2.3", force=True)
+
+        # Change resolution to exact
+        config_path = temp_project / "config" / "prompts.yaml"
+        import yaml
+
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+
+        config["prompts"]["research"]["resolution"] = "exact"
+
+        with open(config_path, "w") as f:
+            yaml.safe_dump(config, f)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        # Exact match should work
+        tpl = await loader.load("research", "1.0.0")
+        assert tpl.version == "1.0.0"
+
+        # Prefix should fail in exact mode
+        with pytest.raises(ValueError, match="not found.*exact"):
+            await loader.load("research", "1")
+
+    @pytest.mark.asyncio
+    async def test_semver_no_compatible_version(self, temp_project):
+        """Test semver resolution with no compatible version."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        with pytest.raises(ValueError, match="No compatible version"):
+            await loader.load("research", "2")
+
+    @pytest.mark.asyncio
+    async def test_prompt_template_format(self, temp_project):
+        """Test PromptTemplate format method."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        # Add placeholders to prompt
+        prompt_path = temp_project / "prompts" / "research" / "v1.0.0.md"
+        prompt_path.write_text("Hello {name}, your score is {score}!")
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+        tpl = await loader.load("research", "1.0.0")
+
+        formatted = tpl.format(name="Alice", score=95)
+        assert formatted == "Hello Alice, your score is 95!"
+
+    @pytest.mark.asyncio
+    async def test_prompt_with_frontmatter(self, temp_project):
+        """Test loading prompt with YAML frontmatter."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        # Add frontmatter to prompt
+        prompt_path = temp_project / "prompts" / "research" / "v1.0.0.md"
+        prompt_path.write_text(
+            "---\n"
+            "version: 1.0.0\n"
+            "author: Test Author\n"
+            "tags:\n"
+            "  - research\n"
+            "  - analysis\n"
+            "---\n"
+            "This is the actual prompt content."
+        )
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+        tpl = await loader.load("research", "1.0.0")
+
+        assert tpl.content == "This is the actual prompt content."
+        assert tpl.version == "1.0.0"
+        assert tpl.metadata.get("author") == "Test Author"
+        assert "research" in tpl.metadata.get("tags", [])
+
+    @pytest.mark.asyncio
+    async def test_prompt_with_invalid_frontmatter(self, temp_project):
+        """Test loading prompt with invalid YAML frontmatter."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        # Add invalid frontmatter
+        prompt_path = temp_project / "prompts" / "research" / "v1.0.0.md"
+        prompt_path.write_text(
+            "---\n" "invalid: [yaml: content\n" "---\n" "Prompt content."
+        )
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+        tpl = await loader.load("research", "1.0.0")
+
+        # Should fall back to empty metadata
+        assert tpl.content == "Prompt content."
+        assert tpl.metadata == {}
+        assert tpl.version == "0.0.0"  # Default version when metadata parsing fails
+
+    @pytest.mark.asyncio
+    async def test_prompt_caching(self, temp_project):
+        """Test that prompts are cached after first load."""
+        generate_prompt("Research", version="1.0.0", force=True)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        # Load twice
+        tpl1 = await loader.load("research", "1.0.0")
+        tpl2 = await loader.load("research", "1.0.0")
+
+        # Should be same instance (cached)
+        assert tpl1 is tpl2
+
+    @pytest.mark.asyncio
+    async def test_prompt_loader_with_empty_config(self, temp_project):
+        """Test PromptLoader with empty config file."""
+        # Create empty config
+        config_path = temp_project / "config" / "prompts.yaml"
+        config_path.write_text("")
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        with pytest.raises(ValueError, match="not found in registry"):
+            await loader.load("any_prompt")
+
+    @pytest.mark.asyncio
+    async def test_prompt_loader_with_missing_config(self, temp_project):
+        """Test PromptLoader with missing config file."""
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/nonexistent.yaml")
+
+        with pytest.raises(ValueError, match="not found in registry"):
+            await loader.load("any_prompt")
+
+    @pytest.mark.asyncio
+    async def test_version_prefix_matching(self, temp_project):
+        """Test detailed version prefix matching."""
+        # Create versions: 1.0.0, 1.2.3, 1.2.5, 2.0.0
+        generate_prompt("Research", version="1.0.0", force=True)
+        generate_prompt("Research", version="1.2.3", force=True)
+        generate_prompt("Research", version="1.2.5", force=True)
+        generate_prompt("Research", version="2.0.0", force=True)
+
+        pkg = self._add_src_to_path(temp_project)
+        loader_mod = importlib.import_module(f"{pkg}.common.prompt_loader")
+        PromptLoader = loader_mod.PromptLoader
+
+        loader = PromptLoader("config/prompts.yaml")
+
+        # Test '1' -> highest 1.x.x
+        tpl = await loader.load("research", "1")
+        assert tpl.version == "1.2.5"
+
+        # Test '1.2' -> highest 1.2.x
+        tpl = await loader.load("research", "1.2")
+        assert tpl.version == "1.2.5"
+
+        # Test '1.0' -> highest 1.0.x
+        tpl = await loader.load("research", "1.0")
+        assert tpl.version == "1.0.0"
+
+        # Test '2' -> highest 2.x.x
+        tpl = await loader.load("research", "2")
+        assert tpl.version == "2.0.0"
+
+        # Test full version
+        tpl = await loader.load("research", "1.2.3")
+        assert tpl.version == "1.2.3"
+

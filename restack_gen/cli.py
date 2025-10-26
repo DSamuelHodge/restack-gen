@@ -116,12 +116,25 @@ def generate(
         str, typer.Option("--backend", help="Backend type for llm-config (direct or kong)")
     ] = "direct",
     version: Annotated[str, typer.Option("--version", help="Prompt version (semver)")] = "1.0.0",
+    with_llm: Annotated[
+        bool,
+        typer.Option(
+            "--with-llm", help="Generate agent with LLM router and prompt loader capabilities"
+        ),
+    ] = False,
+    tools: Annotated[
+        str | None,
+        typer.Option("--tools", help="FastMCP tool server to integrate (e.g., 'Research')"),
+    ] = None,
 ) -> None:
     """
     Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, or prompt).
 
     Examples:
         restack g agent Researcher
+        restack g agent Researcher --with-llm
+        restack g agent Researcher --tools Research
+        restack g agent Researcher --with-llm --tools Research
         restack g workflow EmailCampaign
         restack g function send_email
         restack g pipeline DataPipeline --operators "Fetch → Process ⇄ Store"
@@ -150,13 +163,22 @@ def generate(
             raise typer.Exit(1)
 
         if resource_type == "agent":
-            files = generate_agent(name, force=force)
+            files = generate_agent(name, force=force, with_llm=with_llm, tools_server=tools)
             console.print(f"[green]✓[/green] Generated agent: [bold]{name}[/bold]")
+            if with_llm:
+                console.print("  [cyan]Enhanced with:[/cyan] LLM router & prompt loader")
+            if tools:
+                console.print(f"  [cyan]Enhanced with:[/cyan] FastMCP tools ({tools})")
             console.print(f"  Agent: {files['agent']}")
             console.print(f"  Test: {files['test']}")
             console.print(f"  Client: {files['client']}")
             console.print("\n[bold cyan]Next steps:[/bold cyan]")
             console.print("  1. Implement agent logic in the generated file")
+            if with_llm:
+                console.print("  2. Configure LLM providers: restack g llm-config")
+                console.print("  3. Create prompts: restack g prompt YourPrompt")
+            if tools:
+                console.print(f"  2. Ensure tool server exists: restack g tool-server {tools}")
             console.print("  2. Run tests: make test")
             console.print(f"  3. Schedule agent: python {files['client']}")
 

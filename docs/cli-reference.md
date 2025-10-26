@@ -36,10 +36,15 @@ restack new myapp --dry-run=diff
 ## Generator: agent
 
 ```bash
-restack g agent <Name>
+restack g agent <Name> [--with-llm] [--tools <server_name>]
 ```
 
 - Creates an agent with events, handlers, and tests.
+- **New in v2.0.0**: Agents can be enhanced with LLM routing and FastMCP tool integration.
+
+Options:
+- `--with-llm` Include LLM router and prompt loader capabilities
+- `--tools <server_name>` Integrate with specified FastMCP tool server
 
 Common options (generators):
 - `--task-queue <name>` Set task queue
@@ -48,6 +53,28 @@ Common options (generators):
 - `--map TOKEN:CustomName` Override token-to-class mapping (repeatable)
 - `--force` Overwrite existing files
 - `--dry-run [minimal|diff]` Preview without writing
+
+Examples:
+```bash
+# Basic agent
+restack g agent Processor
+
+# Agent with LLM capabilities
+restack g agent Researcher --with-llm
+
+# Agent with tool integration
+restack g agent DataFetcher --tools Research
+
+# Agent with both LLM and tools
+restack g agent SmartAnalyzer --with-llm --tools DataTools
+```
+
+**Enhanced capabilities:**
+- **LLM Router**: Multi-provider LLM support with automatic fallback (OpenAI, Anthropic, etc.)
+- **Prompt Loader**: Load and version prompts separately from code
+- **FastMCP Tools**: Call external tools for web search, data fetching, etc.
+
+See [Agent LLM Migration Guide](./agent-llm-migration.md) for details on using these features.
 
 ---
 

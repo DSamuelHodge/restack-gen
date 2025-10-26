@@ -193,6 +193,8 @@ def generate_agent(
     force: bool = False,
     event_type: str = "dict",
     state_type: str = "dict",
+    with_llm: bool = False,
+    tools_server: str | None = None,
 ) -> dict[str, Path]:
     """Generate an agent with test and client files.
 
@@ -201,6 +203,8 @@ def generate_agent(
         force: If True, overwrite existing generated files
         event_type: Type for agent events
         state_type: Type for agent state
+        with_llm: If True, include LLM router and prompt loader
+        tools_server: FastMCP tool server name to integrate
 
     Returns:
         Dictionary mapping file type to path
@@ -258,6 +262,8 @@ def generate_agent(
         "state_type": state_type,
         "events": [],  # Empty list for now, user can add events
         "state_fields": [],  # Empty list for now, user can add state fields
+        "with_llm": with_llm,
+        "tools_server": tools_server,
     }
 
     # Generate agent file

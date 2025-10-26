@@ -135,6 +135,68 @@ class TestAgentGeneration:
         assert service_content.count("CleanerAgent,") == 1
         assert service_content.count("from testproject.agents.cleaner import CleanerAgent") == 1
 
+    def test_generate_agent_with_llm(self, test_project, monkeypatch):
+        """Test that agent generation with --with-llm includes LLM components."""
+        monkeypatch.chdir(test_project)
+
+        files = generate_agent("intelligent", with_llm=True)
+
+        agent_content = files["agent"].read_text()
+        # Check LLM imports
+        assert "from testproject.common.llm_router import LLMRouter, LLMRequest" in agent_content
+        assert "from testproject.common.prompt_loader import PromptLoader" in agent_content
+        # Check initialization
+        assert "self.llm = LLMRouter()" in agent_content
+        assert "self.prompts = PromptLoader()" in agent_content
+        # Check sample usage
+        assert "prompt_template = await self.prompts.load" in agent_content
+        assert "await self.llm.chat(LLMRequest" in agent_content
+
+    def test_generate_agent_with_tools(self, test_project, monkeypatch):
+        """Test that agent generation with --tools includes FastMCP client."""
+        monkeypatch.chdir(test_project)
+
+        files = generate_agent("tooled", tools_server="Research")
+
+        agent_content = files["agent"].read_text()
+        # Check tool imports
+        assert "from testproject.common.fastmcp_manager import FastMCPClient" in agent_content
+        # Check initialization
+        assert 'self.tools = FastMCPClient("Research")' in agent_content
+        # Check sample usage
+        assert "await self.tools.call_tool" in agent_content
+
+    def test_generate_agent_with_llm_and_tools(self, test_project, monkeypatch):
+        """Test that agent generation with both --with-llm and --tools works."""
+        monkeypatch.chdir(test_project)
+
+        files = generate_agent("enhanced", with_llm=True, tools_server="DataTools")
+
+        agent_content = files["agent"].read_text()
+        # Check both LLM and tool components
+        assert "LLMRouter" in agent_content
+        assert "PromptLoader" in agent_content
+        assert "FastMCPClient" in agent_content
+        assert 'self.tools = FastMCPClient("DataTools")' in agent_content
+        assert "self.llm = LLMRouter()" in agent_content
+        # Check integration in sample code
+        assert "tool_result = await self.tools.call_tool" in agent_content
+        assert "prompt_template = await self.prompts.load" in agent_content
+
+    def test_generate_agent_without_enhancements(self, test_project, monkeypatch):
+        """Test that agent generation without flags doesn't include LLM/tool components."""
+        monkeypatch.chdir(test_project)
+
+        files = generate_agent("basic")
+
+        agent_content = files["agent"].read_text()
+        # Ensure LLM components are NOT present
+        assert "LLMRouter" not in agent_content
+        assert "PromptLoader" not in agent_content
+        assert "FastMCPClient" not in agent_content
+        assert "self.llm" not in agent_content
+        assert "self.tools" not in agent_content
+
 
 class TestWorkflowGeneration:
     """Test workflow generation."""

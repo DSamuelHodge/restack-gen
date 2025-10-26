@@ -1,0 +1,86 @@
+"""Tests for FastMCP Server Manager generation and functionality."""
+
+import pytest
+
+from restack_gen.doctor import check_tools
+from restack_gen.generator import generate_tool_server
+from restack_gen.project import create_new_project
+
+
+class TestFastMCPManagerGeneration:
+    """Test FastMCP manager file generation."""
+
+    @pytest.fixture
+    def test_project(self, tmp_path, monkeypatch):
+        """Create a test project."""
+        project_path = tmp_path / "testapp"
+        create_new_project("testapp", parent_dir=tmp_path, force=False)
+        monkeypatch.chdir(project_path)
+        return project_path
+
+    def test_generate_manager_on_first_tool_server(self, test_project):
+        """Test that fastmcp_manager.py is created with first tool server."""
+        # Generate first tool server
+        result = generate_tool_server("Research", force=False)
+
+        # Check that manager was created
+        manager_path = test_project / "src" / "testapp" / "common" / "fastmcp_manager.py"
+        assert manager_path.exists(), "Manager file should be created with first tool server"
+        assert "manager" in result
+        assert result["manager"] == manager_path
+
+        # Verify manager content
+        content = manager_path.read_text()
+        assert "class FastMCPServerManager" in content
+        assert "class FastMCPClient" in content
+        assert "def get_manager()" in content
+
+    def test_manager_not_regenerated_for_second_tool_server(self, test_project):
+        """Test that manager is not regenerated for subsequent tool servers."""
+        # Generate first tool server
+        result1 = generate_tool_server("Research", force=False)
+        assert result1["manager"] is not None
+
+        # Get original timestamp
+        manager_path = test_project / "src" / "testapp" / "common" / "fastmcp_manager.py"
+        original_mtime = manager_path.stat().st_mtime
+
+        # Generate second tool server
+        result2 = generate_tool_server("Docs", force=False)
+
+        # Manager should not be in result (already exists)
+        assert "manager" not in result2 or result2["manager"] is None
+
+        # Manager file should not be modified
+        assert manager_path.stat().st_mtime == original_mtime
+
+    def test_manager_template_contains_required_methods(self, test_project):
+        """Test that generated manager has all required methods."""
+        generate_tool_server("Research", force=False)
+
+        manager_path = test_project / "src" / "testapp" / "common" / "fastmcp_manager.py"
+        content = manager_path.read_text()
+
+        # Check FastMCPServerManager methods
+        assert "def __init__" in content
+        assert "def _load_config" in content
+        assert "async def start_all" in content
+        assert "async def start_server" in content
+        assert "async def stop_server" in content
+        assert "async def stop_all" in content
+        assert "async def health_check" in content
+        assert "async def health_check_all" in content
+        assert "def list_servers" in content
+        assert "def get_server" in content
+
+        # Check FastMCPClient methods
+        assert "async def __aenter__" in content
+        assert "async def __aexit__" in content
+        assert "async def call_tool" in content
+        assert "async def list_tools" in content
+
+        # Check helper functions
+        assert "def get_manager()" in content
+        assert "async def start_tool_servers()" in content
+        assert "async def stop_tool_servers()" in content
+
