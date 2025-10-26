@@ -38,7 +38,7 @@ async def test_import_and_instantiation(tmp_path, monkeypatch):
     router_mod = _import_router_from_file(files["router"])  # type: ignore[index]
 
     # Access classes and instantiate LLMRequest
-    LLMRequest = getattr(router_mod, "LLMRequest")
+    LLMRequest = router_mod.LLMRequest
     # Should not raise PydanticUserError for postponed annotations
     req = LLMRequest(messages=[{"role": "user", "content": "hi"}], dry_run=True)
 
