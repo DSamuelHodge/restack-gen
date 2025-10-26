@@ -2,6 +2,47 @@
 
 Common issues and how to fix them.
 
+## Doctor checks: what they do and quick fixes
+
+Run `restack doctor` to validate your setup. Here’s what it checks and how to fix common findings:
+
+- LLM router config (config/llm_router.yaml)
+  - Symptoms:
+    - "LLM router config not found" or "missing 'llm' root key"
+    - "Missing environment variables for LLM config: ..."
+  - Quick fixes:
+    - Generate defaults: `restack g llm-config` (use `--backend kong` if you route via Kong)
+    - Set required env vars referenced as ${VAR} in the YAML:
+      - Windows PowerShell: `$env:OPENAI_API_KEY = "sk-..."`; `$env:KONG_GATEWAY_URL = "http://localhost:8000"`
+      - macOS/Linux: `export OPENAI_API_KEY=sk-...`; `export KONG_GATEWAY_URL=http://localhost:8000`
+    - Edit providers in `config/llm_router.yaml` to match your accounts.
+
+- Kong AI Gateway reachability (only if backend=kong)
+  - Symptoms:
+    - "Kong gateway not reachable at http://..."
+  - Quick fixes:
+    - Ensure Kong is running and reachable at `KONG_GATEWAY_URL`
+    - Verify the URL in `llm.router.url` (defaults to http://localhost:8000)
+    - Re-run: `restack doctor --verbose` to see the exact error
+
+- Prompts registry (config/prompts.yaml)
+  - Symptoms:
+    - "No prompts registry found"
+    - "Missing 'latest' for: ..." or "Missing prompt files: ..."
+  - Quick fixes:
+    - Create a prompt and registry entries: `restack g prompt MyPrompt --version 1.0.0`
+    - Ensure each prompt has a `latest` version and all referenced files exist
+    - Update paths in `config/prompts.yaml` if files were moved
+
+- FastMCP tool servers (optional)
+  - How to run: `restack doctor --check-tools` (adds tool checks)
+  - Symptoms:
+    - "FastMCP not installed" or "tool servers cannot be imported"
+  - Quick fixes:
+    - Install FastMCP: `pip install fastmcp`
+    - Verify `config/tools.yaml` has valid modules and server names
+    - If servers should be running, start them, then re-run doctor
+
 ## CLI not found after install
 
 Symptoms:
