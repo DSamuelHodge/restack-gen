@@ -47,7 +47,7 @@ class Resource(IRNode):
     name: str
     resource_type: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate resource type."""
         valid_types = {"agent", "workflow", "function", "unknown"}
         if self.resource_type not in valid_types:
@@ -73,7 +73,7 @@ class Sequence(IRNode):
 
     nodes: list[IRNode]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate sequence has at least 2 nodes."""
         if len(self.nodes) < 2:
             raise ValueError(f"Sequence must have at least 2 nodes, got {len(self.nodes)}")
@@ -96,7 +96,7 @@ class Parallel(IRNode):
 
     nodes: list[IRNode]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate parallel has at least 2 nodes."""
         if len(self.nodes) < 2:
             raise ValueError(f"Parallel must have at least 2 nodes, got {len(self.nodes)}")
@@ -123,7 +123,7 @@ class Conditional(IRNode):
     true_branch: IRNode
     false_branch: IRNode | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate condition is not empty."""
         if not self.condition or not self.condition.strip():
             raise ValueError("Conditional condition cannot be empty")
@@ -133,6 +133,19 @@ class Conditional(IRNode):
         if self.false_branch:
             return f"Conditional({self.condition} ? {self.true_branch} : {self.false_branch})"
         return f"Conditional({self.condition} ? {self.true_branch})"
+
+
+from typing import overload
+
+
+@overload
+def flatten_sequence(node: Sequence) -> Sequence:  # noqa: D401 - overload docs inherited
+    ...
+
+
+@overload
+def flatten_sequence(node: IRNode) -> IRNode:  # noqa: D401 - overload docs inherited
+    ...
 
 
 def flatten_sequence(node: IRNode) -> IRNode:
@@ -150,16 +163,27 @@ def flatten_sequence(node: IRNode) -> IRNode:
     if not isinstance(node, Sequence):
         return node
 
-    flattened_nodes = []
+    flattened_nodes: list[IRNode] = []
     for child in node.nodes:
         if isinstance(child, Sequence):
             # Recursively flatten nested sequences
+            # In this branch, child is Sequence, and overload ensures return type is Sequence
             flattened_child = flatten_sequence(child)
             flattened_nodes.extend(flattened_child.nodes)
         else:
             flattened_nodes.append(child)
 
     return Sequence(flattened_nodes)
+
+
+@overload
+def flatten_parallel(node: Parallel) -> Parallel:  # noqa: D401 - overload docs inherited
+    ...
+
+
+@overload
+def flatten_parallel(node: IRNode) -> IRNode:  # noqa: D401 - overload docs inherited
+    ...
 
 
 def flatten_parallel(node: IRNode) -> IRNode:
@@ -177,10 +201,11 @@ def flatten_parallel(node: IRNode) -> IRNode:
     if not isinstance(node, Parallel):
         return node
 
-    flattened_nodes = []
+    flattened_nodes: list[IRNode] = []
     for child in node.nodes:
         if isinstance(child, Parallel):
             # Recursively flatten nested parallel
+            # In this branch, child is Parallel, and overload ensures return type is Parallel
             flattened_child = flatten_parallel(child)
             flattened_nodes.extend(flattened_child.nodes)
         else:

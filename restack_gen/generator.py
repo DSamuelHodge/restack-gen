@@ -146,7 +146,10 @@ def write_file(file_path: Path, content: str) -> None:
         f.write(content)
 
 
-def _read_yaml(file_path: Path) -> dict:
+from typing import Any
+
+
+def _read_yaml(file_path: Path) -> dict[str, Any]:
     """Read a YAML file into a dict, returning empty dict if missing.
 
     Args:
@@ -163,7 +166,7 @@ def _read_yaml(file_path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _write_yaml(file_path: Path, data: dict) -> None:
+def _write_yaml(file_path: Path, data: dict[str, Any]) -> None:
     """Write a dict to YAML file with safe formatting."""
     import re
 
@@ -173,7 +176,9 @@ def _write_yaml(file_path: Path, data: dict) -> None:
     class SemverQuotedDumper(yaml.SafeDumper):
         pass
 
-    def _conditional_str_representer(dumper, value: str):
+    def _conditional_str_representer(
+        dumper: SemverQuotedDumper, value: str
+    ) -> "yaml.nodes.Node":  # types from PyYAML
         if re.match(r"^\d+\.\d+\.\d+$", value) or value.startswith("prompts/"):
             return dumper.represent_scalar("tag:yaml.org,2002:str", value, style='"')
         return dumper.represent_scalar("tag:yaml.org,2002:str", value)
@@ -726,11 +731,13 @@ def generate_prompt(
     registry["prompts"][prompt_key] = entry
     _write_yaml(config_file, registry)
 
-    return {
+    result: dict[str, Path] = {
         "prompt": prompt_file,
         "config": config_file,
-        "loader": loader_file if loader_generated else None,
     }
+    if loader_generated:
+        result["loader"] = loader_file
+    return result
 
 
 def generate_tool_server(
@@ -839,8 +846,12 @@ def generate_tool_server(
         print(f"Generated FastMCP manager: {manager_file}")
         manager_generated = True
 
-    return {
-        "config": config_file if not config_file.exists() or force else None,
+    result: dict[str, Path] = {
         "server": server_file,
-        "manager": manager_file if manager_generated else None,
     }
+    # Only include keys when a file was generated/overwritten to keep values as Path (not None)
+    if not config_file.exists() or force:
+        result["config"] = config_file
+    if manager_generated:
+        result["manager"] = manager_file
+    return result

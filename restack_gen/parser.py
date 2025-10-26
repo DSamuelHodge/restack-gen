@@ -269,7 +269,9 @@ class Parser:
             true_branch = self.parse_expression()
             false_branch: IRNode | None = None
 
-            if self.current_token.type == TokenType.COMMA:
+            # Capture current token type in a local variable to avoid over-narrowing in type checkers
+            current_type = self.current_token.type
+            if current_type == TokenType.COMMA:  # type: ignore[comparison-overlap]
                 self.advance()  # consume ,
                 false_branch = self.parse_expression()
 

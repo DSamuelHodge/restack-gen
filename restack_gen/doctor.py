@@ -217,7 +217,7 @@ def check_tools(base_dir: str | Path = ".", *, verbose: bool = False) -> DoctorC
             errors = sum(1 for h in health_results.values() if h.get("status") == "error")
 
             if errors > 0:
-                status = "warn"
+                status: Status = "warn"
                 msg = f"{errors}/{len(servers)} tool servers have errors"
             elif running == len(servers):
                 status = "ok"
@@ -256,7 +256,10 @@ def check_tools(base_dir: str | Path = ".", *, verbose: bool = False) -> DoctorC
         return DoctorCheckResult("tools", "warn", "Unable to check tool servers", details=str(e))
 
 
-async def _check_tools_health_async(base_dir: Path) -> dict:
+from typing import Any, cast
+
+
+async def _check_tools_health_async(base_dir: Path) -> dict[str, dict[str, Any]]:
     """Async helper to check tool server health.
 
     Args:
@@ -292,7 +295,9 @@ async def _check_tools_health_async(base_dir: Path) -> dict:
             # Get manager and check health
             manager_class = manager_module.FastMCPServerManager
             manager = manager_class()
-            health_results = await manager.health_check_all()
+            health_results = cast(
+                dict[str, dict[str, Any]], await manager.health_check_all()
+            )
 
             return health_results
         finally:
@@ -334,11 +339,11 @@ def summarize(results: Iterable[DoctorCheckResult]) -> dict[str, int | Status]:
 
     Returns a dict with keys: ok, warn, fail, overall
     """
-    counts = {"ok": 0, "warn": 0, "fail": 0}
+    counts_int: dict[str, int] = {"ok": 0, "warn": 0, "fail": 0}
     worst: Status = "ok"
     for r in results:
-        counts[r.status] += 1
+        counts_int[r.status] += 1
         if _status_priority(r.status) > _status_priority(worst):
             worst = r.status
-    counts["overall"] = worst
-    return counts
+    result: dict[str, int | Status] = {**counts_int, "overall": worst}
+    return result

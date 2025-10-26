@@ -4,6 +4,8 @@ This module provides functions to generate Restack workflow pipeline code
 from the Intermediate Representation (IR) tree created by the parser.
 """
 
+from typing import cast
+
 from restack_gen.ir import Conditional, IRNode, Parallel, Resource, Sequence
 
 
@@ -229,10 +231,13 @@ def generate_parallel_code(parallel: Parallel, indent: int = 0, result_var: str 
 
     # For simple resources, generate gather call
     if all(isinstance(node, Resource) for node in parallel.nodes):
-        activities = []
-        for node in parallel.nodes:
-            activity_name = f"{_to_snake_case(node.name)}_activity"
-            activities.append(f"{inner_spaces}self.execute_activity({activity_name}, {result_var})")
+        activities: list[str] = []
+        resources: list[Resource] = [cast(Resource, n) for n in parallel.nodes]
+        for res in resources:
+            activity_name = f"{_to_snake_case(res.name)}_activity"
+            activities.append(
+                f"{inner_spaces}self.execute_activity({activity_name}, {result_var})"
+            )
 
         code = f"{spaces}results = await asyncio.gather(\n"
         code += ",\n".join(activities)
