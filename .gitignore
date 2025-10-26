@@ -132,3 +132,11 @@ dmypy.json
 # Generated projects (for testing)
 examples/demo/
 examples/test_*/
+
+# Jira integration (local-only artifacts)
+# Do not commit environment secrets or local Jira setup files
+jira.env
+.env.jira
+jira_*.env
+.jira/
+setup_jira_integration.local.*
