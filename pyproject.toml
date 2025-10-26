@@ -34,6 +34,9 @@ dependencies = [
     "click>=8.1.0",
     "httpx>=0.27.0",
     "structlog>=24.1.0",
+    # Core runtime integrations
+    "restack-ai>=1.2.3",
+    "fastmcp>=0.1.0",
 ]
 
 [project.optional-dependencies]
