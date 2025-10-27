@@ -990,3 +990,70 @@ def generate_tool_server(
     if manager_generated:
         result["manager"] = manager_file
     return result
+
+
+def generate_config_migration(
+    name: str,
+    target: str,
+    force: bool = False,
+) -> dict[str, Path]:
+    """Generate a timestamped configuration migration file.
+
+    Args:
+        name: Migration name (e.g., AddToolServer)
+        target: Target config file ('prompts', 'llm-router', 'tools')
+        force: If True, overwrite existing migration with same name
+
+    Returns:
+        Dictionary mapping file type to path
+
+    Raises:
+        GenerationError: If generation fails
+    """
+    import time
+
+    # 1. Validation and Setup
+    is_valid, error = validate_name(name)
+    if not is_valid:
+        raise GenerationError(f"Invalid migration name: {error}")
+
+    if target not in ["prompts", "llm-router", "tools"]:
+        raise GenerationError(
+            f"Invalid migration target: {target}. " "Must be 'prompts', 'llm-router', or 'tools'."
+        )
+
+    project_root = find_project_root()
+    if not project_root:
+        raise GenerationError("Not in a restack-gen project.")
+
+    # 2. Name and Path Generation
+    timestamp = time.strftime("%Y%m%d%H%M%S")
+    snake_name = to_snake_case(name)
+    class_name = to_pascal_case(snake_name)
+
+    migration_dir = project_root / "config" / "migrations"
+    migration_file_name = f"{timestamp}_{snake_name}.py"
+    migration_file = migration_dir / migration_file_name
+
+    # Check if a migration with this name already exists (ignoring timestamp)
+    for existing_file in migration_dir.glob(f"*_{snake_name}.py"):
+        if not force:
+            raise GenerationError(
+                f"Migration '{name}' already exists: {existing_file.name}. "
+                "Use --force to overwrite."
+            )
+
+    # 3. Generate Migration File
+    context = {
+        "migration_class": class_name,
+        "target": target,
+        "target_filename": f"{target}.yaml",
+        "timestamp": timestamp,
+    }
+
+    migration_content = render_template("config_migration.py.j2", context)
+    write_file(migration_file, migration_content)
+
+    return {
+        "migration": migration_file,
+    }

@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
+from restack_gen.migration import MigrationError, MigrationRunner, MigrationStatus
+
 
 class RunnerError(Exception):
     """Raised when service runner encounters an error."""
@@ -128,3 +130,71 @@ def start_service(
         raise RunnerError(f"Python executable not found: {sys.executable}") from None
     except Exception as e:
         raise RunnerError(f"Failed to start service: {e}") from e
+
+
+def get_migration_status(target: str | None = None) -> list[MigrationStatus]:
+    """Get status of all migrations.
+
+    Args:
+        target: Optional filter by target config (e.g., 'prompts')
+
+    Returns:
+        List of MigrationStatus objects
+
+    Raises:
+        RunnerError: If migration status check fails
+    """
+    from restack_gen.migration import MigrationRunner
+
+    try:
+        root = Path.cwd()
+        runner = MigrationRunner(root)
+        return runner.get_status(target=target)
+    except Exception as e:
+        raise RunnerError(f"Failed to get migration status: {e}") from e
+
+
+def run_migrations_up(target: str | None = None, count: int | None = None) -> list[str]:
+    """Apply pending migrations.
+
+    Args:
+        target: Optional filter by target config (e.g., 'prompts')
+        count: Optional limit number of migrations to apply
+
+    Returns:
+        List of applied migration names
+
+    Raises:
+        RunnerError: If migration fails
+    """
+    from restack_gen.migration import MigrationError, MigrationRunner
+
+    try:
+        root = Path.cwd()
+        runner = MigrationRunner(root)
+        return runner.migrate_up(target=target, count=count)
+    except MigrationError as e:
+        raise RunnerError(f"Migration failed: {e}") from e
+
+
+def run_migrations_down(target: str | None = None, count: int = 1) -> list[str]:
+    """Rollback applied migrations.
+
+    Args:
+        target: Optional filter by target config (e.g., 'prompts')
+        count: Number of migrations to rollback (default: 1)
+
+    Returns:
+        List of rolled back migration names
+
+    Raises:
+        RunnerError: If rollback fails
+    """
+    from restack_gen.migration import MigrationError, MigrationRunner
+
+    try:
+        root = Path.cwd()
+        runner = MigrationRunner(root)
+        return runner.migrate_down(target=target, count=count)
+    except MigrationError as e:
+        raise RunnerError(f"Rollback failed: {e}") from e

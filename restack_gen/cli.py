@@ -12,6 +12,7 @@ from restack_gen import __version__
 from restack_gen.generator import (
     GenerationError,
     generate_agent,
+    generate_config_migration,
     generate_function,
     generate_llm_config,
     generate_pipeline,
@@ -104,7 +105,7 @@ def generate(
     resource_type: Annotated[
         str,
         typer.Argument(
-            help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, or prompt"
+            help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, prompt, or migration"
         ),
     ],
     name: Annotated[str | None, typer.Argument(help="Name of the resource to generate")] = None,
@@ -129,9 +130,16 @@ def generate(
         str | None,
         typer.Option("--tools", help="FastMCP tool server to integrate (e.g., 'Research')"),
     ] = None,
+    target: Annotated[
+        str | None,
+        typer.Option(
+            "--target",
+            help="Target configuration file for migration (e.g., prompts, llm-router, tools)",
+        ),
+    ] = None,
 ) -> None:
     """
-    Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, or prompt).
+    Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, prompt, or migration).
 
     Examples:
         restack g agent Researcher
@@ -142,9 +150,10 @@ def generate(
         restack g function send_email
         restack g pipeline DataPipeline --operators "Fetch → Process ⇄ Store"
         restack g tool-server Research
-    restack g llm-config
+        restack g llm-config
         restack g llm-config --backend kong
-    restack g prompt AnalyzeResearch --version 1.0.0
+        restack g prompt AnalyzeResearch --version 1.0.0
+        restack g migration AddNewPromptVersionField --target prompts
     """
     try:
         if resource_type == "llm-config":
@@ -265,10 +274,28 @@ def generate(
                 "  3. Add more versions with --version and update 'latest' if appropriate"
             )
 
+        elif resource_type == "migration":
+            if not target:
+                console.print("[red]Error:[/red] Migration requires --target option")
+                console.print("Example: restack g migration AddToolServer --target tools")
+                console.print("Valid targets: prompts, llm-router, tools")
+                raise typer.Exit(1)
+
+            files = generate_config_migration(name, target, force=force)
+            console.print(
+                f"[green]✓[/green] Generated configuration migration: [bold]{name}[/bold]"
+            )
+            console.print(f"  Target: {target}.yaml")
+            console.print(f"  File: {files['migration']}")
+            console.print("\n[bold cyan]Next steps:[/bold cyan]")
+            console.print("  1. Define 'up' and 'down' logic in the generated file")
+            console.print(f"  2. Apply migration: restack migrate --target {target}")
+            console.print("  3. Rollback if needed: restack migrate --direction down")
+
         else:
             console.print(f"[red]Error:[/red] Unknown resource type: {resource_type}")
             console.print(
-                "Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt"
+                "Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt, migration"
             )
             raise typer.Exit(1)
 
@@ -352,6 +379,84 @@ def doctor(
 
     if summary["overall"] == "fail":
         raise typer.Exit(code=1)
+
+
+@app.command()
+def migrate(
+    target: Annotated[
+        str | None,
+        typer.Option(
+            "--target", help="Target configuration file (e.g., prompts, llm-router, tools)"
+        ),
+    ] = None,
+    direction: Annotated[
+        str,
+        typer.Option("--direction", "-d", help="Direction: 'up' (default) or 'down'"),
+    ] = "up",
+    count: Annotated[
+        int | None,
+        typer.Option("--count", "-n", help="Number of migrations to apply/rollback"),
+    ] = None,
+    status: Annotated[
+        bool,
+        typer.Option("--status", "-s", help="Show migration status and exit"),
+    ] = False,
+) -> None:
+    """
+    Apply or rollback configuration migrations.
+
+    Migrations provide versioned, reversible changes to configuration files.
+
+    Examples:
+        restack migrate                           # Apply all pending migrations
+        restack migrate --target prompts          # Apply prompts migrations only
+        restack migrate --direction down          # Rollback last migration
+        restack migrate --direction down --count 2  # Rollback last 2 migrations
+        restack migrate --status                  # Show migration status
+    """
+    try:
+        if status:
+            console.print("[yellow]Migration Status:[/yellow]\n")
+            statuses = runner_mod.get_migration_status(target=target)
+            if not statuses:
+                console.print("[dim]No migrations found.[/dim]")
+                return
+
+            for s in statuses:
+                status_icon = "[green]✓[/green]" if s.applied else "[dim]○[/dim]"
+                console.print(f"{status_icon} {s.timestamp}_{s.name}")
+                if s.applied and s.applied_at:
+                    console.print(f"    [dim]Applied: {s.applied_at}[/dim]")
+            return
+
+        console.print(
+            f"[yellow]Applying configuration migrations (Direction: {direction})...[/yellow]"
+        )
+
+        if direction == "up":
+            applied = runner_mod.run_migrations_up(target=target, count=count)
+            if applied:
+                console.print("[green]✓[/green] Applied migrations:")
+                for migration in applied:
+                    console.print(f"  - {migration}")
+            else:
+                console.print("[dim]No pending migrations to apply.[/dim]")
+        elif direction == "down":
+            rollback_count = count if count is not None else 1
+            rolled_back = runner_mod.run_migrations_down(target=target, count=rollback_count)
+            if rolled_back:
+                console.print("[green]✓[/green] Rolled back migrations:")
+                for migration in rolled_back:
+                    console.print(f"  - {migration}")
+            else:
+                console.print("[dim]No applied migrations to roll back.[/dim]")
+        else:
+            console.print("[red]Error:[/red] Direction must be 'up' or 'down'")
+            raise typer.Exit(1)
+
+    except runner_mod.RunnerError as e:
+        console.print(f"[red]Error:[/red] Migration failed: {e}", style="red")
+        raise typer.Exit(code=1) from None
 
 
 @app.command(name="console")
