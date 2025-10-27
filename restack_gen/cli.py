@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 
 from restack_gen import __version__
+from restack_gen import console as console_mod
 from restack_gen import doctor as doctor_mod
 from restack_gen import runner as runner_mod
 from restack_gen.generator import (
@@ -335,6 +336,29 @@ def doctor(
 
     if summary["overall"] == "fail":
         raise typer.Exit(code=1)
+
+
+@app.command(name="console")
+def console_repl(
+    config: Annotated[
+        str, typer.Option("--config", "-c", help="Path to config file")
+    ] = "config/settings.yaml",
+) -> None:
+    """
+    Launch an interactive Python console with the Restack environment loaded.
+
+    Provides access to project settings, models, and project context.
+    Requires IPython to be installed (pip install ipython).
+
+    Example:
+        restack console
+        restack console --config config/dev.yaml
+    """
+    try:
+        console_mod.start_console(config_path=config)
+    except console_mod.ConsoleError as e:
+        console.print(f"[red]Error starting console:[/red] {e}")
+        raise typer.Exit(code=1) from e
 
 
 if __name__ == "__main__":

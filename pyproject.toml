@@ -51,6 +51,9 @@ dev = [
     "hatchling>=1.21.0",
     "respx>=0.21.0",
 ]
+console = [
+    "ipython>=8.0.0",
+]
 
 [project.scripts]
 restack = "restack_gen.cli:app"
