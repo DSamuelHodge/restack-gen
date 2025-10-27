@@ -18,6 +18,7 @@ from restack_gen.generator import (
     generate_llm_config,
     generate_pipeline,
     generate_prompt,
+    generate_scaffold,
     generate_tool_server,
     generate_workflow,
 )
@@ -101,7 +102,7 @@ def generate(
     resource_type: Annotated[
         str,
         typer.Argument(
-            help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, or prompt"
+            help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, prompt, or scaffold"
         ),
     ],
     name: Annotated[str | None, typer.Argument(help="Name of the resource to generate")] = None,
@@ -128,7 +129,7 @@ def generate(
     ] = None,
 ) -> None:
     """
-    Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, or prompt).
+    Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, prompt, or scaffold).
 
     Examples:
         restack g agent Researcher
@@ -139,9 +140,10 @@ def generate(
         restack g function send_email
         restack g pipeline DataPipeline --operators "Fetch → Process ⇄ Store"
         restack g tool-server Research
-    restack g llm-config
+        restack g llm-config
         restack g llm-config --backend kong
-    restack g prompt AnalyzeResearch --version 1.0.0
+        restack g prompt AnalyzeResearch --version 1.0.0
+        restack g scaffold InvoiceProcessor
     """
     try:
         if resource_type == "llm-config":
@@ -162,7 +164,20 @@ def generate(
             console.print(f"[red]Error:[/red] Name is required for {resource_type}")
             raise typer.Exit(1)
 
-        if resource_type == "agent":
+        if resource_type == "scaffold":
+            files = generate_scaffold(name, force=force)
+            console.print(f"[green]✓[/green] Generated full scaffold for: [bold]{name}[/bold]")
+            console.print("  [cyan]Generated files:[/cyan]")
+            console.print(f"  - Model: {files['model']}")
+            console.print(f"  - Agent: {files['agent']}")
+            console.print(f"  - Test: {files['test']}")
+            console.print(f"  - Client: {files['client']}")
+            console.print("\n[bold cyan]Next steps:[/bold cyan]")
+            console.print("  1. Review generated Pydantic model for event/state")
+            console.print("  2. Implement core agent logic")
+            console.print("  3. Run tests: make test")
+
+        elif resource_type == "agent":
             files = generate_agent(name, force=force, with_llm=with_llm, tools_server=tools)
             console.print(f"[green]✓[/green] Generated agent: [bold]{name}[/bold]")
             if with_llm:
@@ -251,7 +266,7 @@ def generate(
         else:
             console.print(f"[red]Error:[/red] Unknown resource type: {resource_type}")
             console.print(
-                "Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt"
+                "Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt, scaffold"
             )
             raise typer.Exit(1)
 

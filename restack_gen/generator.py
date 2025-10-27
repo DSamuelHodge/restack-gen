@@ -876,3 +876,118 @@ def generate_tool_server(
     if manager_generated:
         result["manager"] = manager_file
     return result
+
+
+def generate_scaffold(name: str, force: bool = False) -> dict[str, Path]:
+    """
+    Generate a full scaffold: Agent, Test, Client, and a matching Pydantic Model.
+
+    This creates a complete stack including:
+    - Pydantic model in src/{project}/common/models.py
+    - Agent implementation
+    - Test file
+    - Client scheduler
+
+    Args:
+        name: Resource name (e.g., "InvoiceProcessor")
+        force: If True, overwrite existing files
+
+    Returns:
+        Dictionary mapping file type to path
+
+    Raises:
+        GenerationError: If generation fails
+    """
+    # 1. Validation and Setup
+    is_valid, error = validate_name(name)
+    if not is_valid:
+        raise GenerationError(f"Invalid scaffold name: {error}")
+
+    project_root = find_project_root()
+    if not project_root:
+        raise GenerationError("Not in a restack-gen project.")
+
+    project_name = get_project_name(project_root)
+    class_name = to_pascal_case(name)
+    module_name = to_snake_case(name)
+
+    # Names for related files
+    agent_class_name = class_name + "Agent"
+    model_name = class_name + "Data"
+    model_module = "models"
+
+    # Paths
+    models_file = project_root / "src" / project_name / "common" / f"{model_module}.py"
+    agent_file = project_root / "src" / project_name / "agents" / f"{module_name}.py"
+    test_file = project_root / "tests" / f"test_{module_name}_agent.py"
+    client_file = project_root / "client" / f"schedule_{module_name}.py"
+    service_file = project_root / "server" / "service.py"
+
+    check_file_exists(agent_file, force)
+    check_file_exists(test_file, force)
+    check_file_exists(client_file, force)
+
+    # 2. Generate/Update Models File
+    models_context = {
+        "project_name": project_name,
+        "model_name": model_name,
+        "agent_name": agent_class_name,
+        "module_name": model_module,
+    }
+
+    # Generate model file if it doesn't exist, otherwise append new model
+    model_content = render_template("scaffold_model.py.j2", models_context)
+    if not models_file.exists():
+        # Generate new file with header
+        header = '"""Common data models for the application."""\n'
+        write_file(models_file, header + model_content)
+    else:
+        # Append to existing file
+        with open(models_file, "a", encoding="utf-8") as f:
+            f.write("\n\n")
+            f.write(model_content)
+
+    # 3. Generate Agent (using Pydantic model for types)
+    agent_context = {
+        "project_name": project_name,
+        "agent_name": agent_class_name,
+        "module_name": module_name,
+        "event_type": model_name,
+        "state_type": model_name,
+        "with_llm": False,
+        "tools_server": None,
+        "import_model_module": model_module,
+    }
+
+    agent_content = render_template("scaffold_agent.py.j2", agent_context)
+    write_file(agent_file, agent_content)
+
+    # 4. Generate Test
+    test_context = {
+        "project_name": project_name,
+        "agent_name": agent_class_name,
+        "module_name": module_name,
+        "model_name": model_name,
+        "import_model_module": model_module,
+    }
+    test_content = render_template("scaffold_test_agent.py.j2", test_context)
+    write_file(test_file, test_content)
+
+    # 5. Generate Client (reuse existing template)
+    client_context = {
+        "project_name": project_name,
+        "agent_name": agent_class_name,
+        "module_name": module_name,
+    }
+    client_content = render_template("client_schedule_agent.py.j2", client_context)
+    write_file(client_file, client_content)
+
+    # 6. Update service.py to register the agent
+    update_service_file(service_file, "agent", module_name, agent_class_name)
+
+    return {
+        "model": models_file,
+        "agent": agent_file,
+        "test": test_file,
+        "client": client_file,
+    }
