@@ -119,11 +119,11 @@ def check_file_exists(file_path: Path, force: bool = False) -> None:
     if not file_path.exists():
         return
 
-    # Check if file has generated marker
+    # Check if file has generated marker (check first 10 lines)
     with open(file_path, encoding="utf-8") as f:
-        first_line = f.readline()
+        first_lines = "".join(f.readline() for _ in range(10))
 
-    if GENERATED_MARKER in first_line:
+    if GENERATED_MARKER in first_lines:
         if not force:
             raise GenerationError(
                 f"File {file_path} already exists (generated). Use --force to overwrite."
