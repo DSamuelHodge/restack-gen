@@ -11,6 +11,7 @@ from rich.console import Console
 from restack_gen import __version__
 from restack_gen import doctor as doctor_mod
 from restack_gen import runner as runner_mod
+from restack_gen import stats as stats_mod
 from restack_gen.generator import (
     GenerationError,
     generate_agent,
@@ -334,6 +335,29 @@ def doctor(
     )
 
     if summary["overall"] == "fail":
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def stats() -> None:
+    """
+    Display project statistics (files, lines, size).
+
+    Scans project directories and categorizes files into:
+    - Resources: agents, workflows, functions, tools, common
+    - Infrastructure: tests, client, server, config, templates
+
+    Example:
+        restack stats
+    """
+    try:
+        report = stats_mod.run_stats_report(".")
+        stats_mod.render_stats_report(report, console)
+    except stats_mod.StatsError as e:
+        console.print(f"[red]✗ Error:[/red] {e}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        console.print(f"[red]✗ Unexpected error:[/red] {e}")
         raise typer.Exit(code=1)
 
 
