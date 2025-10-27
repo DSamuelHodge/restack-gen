@@ -119,11 +119,18 @@ def check_file_exists(file_path: Path, force: bool = False) -> None:
     if not file_path.exists():
         return
 
-    # Check if file has generated marker
+    # Check if file has generated marker (scan first 10 lines to allow headers/docstrings)
+    marker_found = False
     with open(file_path, encoding="utf-8") as f:
-        first_line = f.readline()
+        for _ in range(10):
+            line = f.readline()
+            if not line:
+                break
+            if GENERATED_MARKER in line:
+                marker_found = True
+                break
 
-    if GENERATED_MARKER in first_line:
+    if marker_found:
         if not force:
             raise GenerationError(
                 f"File {file_path} already exists (generated). Use --force to overwrite."
@@ -749,6 +756,113 @@ def generate_prompt(
     if loader_generated:
         result["loader"] = loader_file
     return result
+
+
+# Default tool server name for scaffold generation
+DEFAULT_TOOL_SERVER = "Research"
+
+
+def generate_scaffold(name: str, force: bool = False) -> dict[str, Path]:
+    """Generate a full scaffold: model, agent, test, and client.
+
+    The scaffold defaults to enabling LLM routing and a FastMCP tool server
+    to provide a fully equipped starter agent.
+
+    Args:
+        name: Base name for resources (e.g., "InvoiceProcessor")
+        force: Overwrite existing generated files if True
+
+    Returns:
+        Mapping of generated artifact types to their paths
+
+    Raises:
+        GenerationError: If generation fails or outside a project
+    """
+    # Validate name
+    is_valid, error = validate_name(name)
+    if not is_valid:
+        raise GenerationError(f"Invalid scaffold name: {error}")
+
+    # Find project context
+    project_root = find_project_root()
+    if not project_root:
+        raise GenerationError(
+            "Not in a restack-gen project. Run this command from within a project directory."
+        )
+    project_name = get_project_name(project_root)
+
+    # Normalize class/module names
+    if "_" in name:
+        base_class = to_pascal_case(name)
+        module_name = name
+    else:
+        base_class = name[0].upper() + name[1:]
+        module_name = to_snake_case(base_class)
+
+    agent_class = base_class + "Agent"
+    model_name = base_class + "Data"
+    model_module = "models"
+
+    # Paths
+    models_file = project_root / "src" / project_name / "common" / f"{model_module}.py"
+    agent_file = project_root / "src" / project_name / "agents" / f"{module_name}.py"
+    test_file = project_root / "tests" / f"test_{module_name}_agent.py"
+    client_file = project_root / "client" / f"schedule_{module_name}.py"
+    service_file = project_root / "server" / "service.py"
+
+    # Check generated files (model file can be appended; skip check here)
+    check_file_exists(agent_file, force)
+    check_file_exists(test_file, force)
+    check_file_exists(client_file, force)
+
+    # 1) Generate/append model class
+    models_context = {
+        "project_name": project_name,
+        "model_name": model_name,
+        "module_name": model_module,
+    }
+    model_content = render_template("scaffold_model.py.j2", models_context)
+    if not models_file.exists():
+        write_file(models_file, model_content)
+    else:
+        # Append new model with separation and marker to allow safe future overwrites
+        with open(models_file, "a", encoding="utf-8") as f:
+            f.write("\n\n")
+            f.write(GENERATED_MARKER + "\n")
+            f.write(model_content)
+
+    # 2) Generate agent with defaults: LLM + Tools enabled
+    agent_context = {
+        "project_name": project_name,
+        "agent_name": agent_class,
+        "name": agent_class,
+        "event_enum_name": f"{agent_class}Event",
+        "module_name": module_name,
+        "events": [],
+        "state_fields": [],
+        "with_llm": True,
+        "tools_server": DEFAULT_TOOL_SERVER,
+    }
+    agent_content = render_template("scaffold_agent.py.j2", agent_context)
+    write_file(agent_file, agent_content)
+
+    # 3) Generate test (reuse standard agent test template)
+    test_content = render_template("test_agent.py.j2", agent_context)
+    write_file(test_file, test_content)
+
+    # 4) Generate client
+    client_content = render_template("client_schedule_agent.py.j2", agent_context)
+    write_file(client_file, client_content)
+
+    # 5) Update service registration
+    update_service_file(service_file, "agent", module_name, agent_class)
+
+    return {
+        "model": models_file,
+        "agent": agent_file,
+        "test": test_file,
+        "client": client_file,
+    }
 
 
 def generate_tool_server(

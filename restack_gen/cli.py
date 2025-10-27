@@ -9,8 +9,6 @@ import typer
 from rich.console import Console
 
 from restack_gen import __version__
-from restack_gen import doctor as doctor_mod
-from restack_gen import runner as runner_mod
 from restack_gen.generator import (
     GenerationError,
     generate_agent,
@@ -18,10 +16,15 @@ from restack_gen.generator import (
     generate_llm_config,
     generate_pipeline,
     generate_prompt,
+    generate_scaffold,
     generate_tool_server,
     generate_workflow,
 )
 from restack_gen.project import create_new_project
+
+from . import console as console_mod
+from . import doctor as doctor_mod
+from . import runner as runner_mod
 
 app = typer.Typer(
     name="restack",
@@ -182,6 +185,20 @@ def generate(
             console.print("  2. Run tests: make test")
             console.print(f"  3. Schedule agent: python {files['client']}")
 
+        elif resource_type == "scaffold":
+            # Full-featured scaffold with defaults for LLM + Tools
+            files = generate_scaffold(name, force=force)
+            console.print(f"[green]✓[/green] Generated full scaffold for: [bold]{name}[/bold]")
+            console.print("  [cyan]Generated files:[/cyan]")
+            for key, path in files.items():
+                console.print(f"  - {key.capitalize()}: {path}")
+            console.print("\n[bold cyan]Next steps:[/bold cyan]")
+            console.print("  1. Review generated Pydantic model in common/models.py")
+            console.print("  2. Implement agent logic and adjust state/events as needed")
+            console.print("  3. Configure LLM providers: restack g llm-config")
+            console.print("  4. Ensure tools config/server exists: restack g tool-server Research")
+            console.print("  5. Run tests: make test")
+
         elif resource_type == "workflow":
             files = generate_workflow(name, force=force)
             console.print(f"[green]✓[/green] Generated workflow: [bold]{name}[/bold]")
@@ -335,6 +352,29 @@ def doctor(
 
     if summary["overall"] == "fail":
         raise typer.Exit(code=1)
+
+
+@app.command(name="console")
+def console_repl(
+    config: Annotated[
+        str, typer.Option("--config", "-c", help="Path to config file")
+    ] = "config/settings.yaml",
+) -> None:
+    """
+    Launch an interactive Python console with the Restack environment loaded.
+
+    Provides access to project settings, models, and project context.
+    Requires IPython to be installed (pip install ipython).
+
+    Example:
+        restack console
+        restack console --config config/dev.yaml
+    """
+    try:
+        console_mod.start_console(config_path=config)
+    except console_mod.ConsoleError as e:
+        console.print(f"[red]Error starting console:[/red] {e}")
+        raise typer.Exit(code=1) from e
 
 
 if __name__ == "__main__":
