@@ -9,8 +9,6 @@ import typer
 from rich.console import Console
 
 from restack_gen import __version__
-from restack_gen import doctor as doctor_mod
-from restack_gen import runner as runner_mod
 from restack_gen.generator import (
     GenerationError,
     generate_agent,
@@ -23,6 +21,10 @@ from restack_gen.generator import (
     generate_workflow,
 )
 from restack_gen.project import create_new_project
+
+from . import console as console_mod
+from . import doctor as doctor_mod
+from . import runner as runner_mod
 
 app = typer.Typer(
     name="restack",
@@ -102,7 +104,7 @@ def generate(
     resource_type: Annotated[
         str,
         typer.Argument(
-            help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, prompt, or scaffold"
+            help="Type of resource: agent, workflow, function, pipeline, tool-server, llm-config, or prompt"
         ),
     ],
     name: Annotated[str | None, typer.Argument(help="Name of the resource to generate")] = None,
@@ -129,7 +131,7 @@ def generate(
     ] = None,
 ) -> None:
     """
-    Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, prompt, or scaffold).
+    Generate a new resource (agent, workflow, function, pipeline, tool-server, llm-config, or prompt).
 
     Examples:
         restack g agent Researcher
@@ -140,10 +142,9 @@ def generate(
         restack g function send_email
         restack g pipeline DataPipeline --operators "Fetch → Process ⇄ Store"
         restack g tool-server Research
-        restack g llm-config
+    restack g llm-config
         restack g llm-config --backend kong
-        restack g prompt AnalyzeResearch --version 1.0.0
-        restack g scaffold InvoiceProcessor
+    restack g prompt AnalyzeResearch --version 1.0.0
     """
     try:
         if resource_type == "llm-config":
@@ -164,20 +165,7 @@ def generate(
             console.print(f"[red]Error:[/red] Name is required for {resource_type}")
             raise typer.Exit(1)
 
-        if resource_type == "scaffold":
-            files = generate_scaffold(name, force=force)
-            console.print(f"[green]✓[/green] Generated full scaffold for: [bold]{name}[/bold]")
-            console.print("  [cyan]Generated files:[/cyan]")
-            console.print(f"  - Model: {files['model']}")
-            console.print(f"  - Agent: {files['agent']}")
-            console.print(f"  - Test: {files['test']}")
-            console.print(f"  - Client: {files['client']}")
-            console.print("\n[bold cyan]Next steps:[/bold cyan]")
-            console.print("  1. Review generated Pydantic model for event/state")
-            console.print("  2. Implement core agent logic")
-            console.print("  3. Run tests: make test")
-
-        elif resource_type == "agent":
+        if resource_type == "agent":
             files = generate_agent(name, force=force, with_llm=with_llm, tools_server=tools)
             console.print(f"[green]✓[/green] Generated agent: [bold]{name}[/bold]")
             if with_llm:
@@ -196,6 +184,20 @@ def generate(
                 console.print(f"  2. Ensure tool server exists: restack g tool-server {tools}")
             console.print("  2. Run tests: make test")
             console.print(f"  3. Schedule agent: python {files['client']}")
+
+        elif resource_type == "scaffold":
+            # Full-featured scaffold with defaults for LLM + Tools
+            files = generate_scaffold(name, force=force)
+            console.print(f"[green]✓[/green] Generated full scaffold for: [bold]{name}[/bold]")
+            console.print("  [cyan]Generated files:[/cyan]")
+            for key, path in files.items():
+                console.print(f"  - {key.capitalize()}: {path}")
+            console.print("\n[bold cyan]Next steps:[/bold cyan]")
+            console.print("  1. Review generated Pydantic model in common/models.py")
+            console.print("  2. Implement agent logic and adjust state/events as needed")
+            console.print("  3. Configure LLM providers: restack g llm-config")
+            console.print("  4. Ensure tools config/server exists: restack g tool-server Research")
+            console.print("  5. Run tests: make test")
 
         elif resource_type == "workflow":
             files = generate_workflow(name, force=force)
@@ -266,7 +268,7 @@ def generate(
         else:
             console.print(f"[red]Error:[/red] Unknown resource type: {resource_type}")
             console.print(
-                "Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt, scaffold"
+                "Valid types: agent, workflow, function, pipeline, tool-server, llm-config, prompt"
             )
             raise typer.Exit(1)
 
@@ -350,6 +352,29 @@ def doctor(
 
     if summary["overall"] == "fail":
         raise typer.Exit(code=1)
+
+
+@app.command(name="console")
+def console_repl(
+    config: Annotated[
+        str, typer.Option("--config", "-c", help="Path to config file")
+    ] = "config/settings.yaml",
+) -> None:
+    """
+    Launch an interactive Python console with the Restack environment loaded.
+
+    Provides access to project settings, models, and project context.
+    Requires IPython to be installed (pip install ipython).
+
+    Example:
+        restack console
+        restack console --config config/dev.yaml
+    """
+    try:
+        console_mod.start_console(config_path=config)
+    except console_mod.ConsoleError as e:
+        console.print(f"[red]Error starting console:[/red] {e}")
+        raise typer.Exit(code=1) from e
 
 
 if __name__ == "__main__":
