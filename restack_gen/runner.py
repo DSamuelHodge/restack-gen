@@ -149,7 +149,9 @@ def get_migration_status(target: str | None = None) -> list[MigrationStatus]:
 
     try:
         root: Path = Path.cwd()
-        runner: MigrationRunner = MigrationRunner(root)  # MigrationRunner already imported at module level
+        runner: MigrationRunner = MigrationRunner(
+            root
+        )  # MigrationRunner already imported at module level
         return runner.get_status(target=target)
     except Exception as e:
         raise RunnerError(f"Failed to get migration status: {e}") from e
@@ -171,7 +173,9 @@ def run_migrations_up(target: str | None = None, count: int | None = None) -> li
 
     try:
         root: Path = Path.cwd()
-        runner: MigrationRunner = MigrationRunner(root)  # MigrationRunner already imported at module level
+        runner: MigrationRunner = MigrationRunner(
+            root
+        )  # MigrationRunner already imported at module level
         return runner.migrate_up(target=target, count=count)
     except MigrationError as e:
         raise RunnerError(f"Migration failed: {e}") from e
@@ -193,7 +197,9 @@ def run_migrations_down(target: str | None = None, count: int = 1) -> list[str]:
 
     try:
         root: Path = Path.cwd()
-        runner: MigrationRunner = MigrationRunner(root)  # MigrationRunner already imported at module level
+        runner: MigrationRunner = MigrationRunner(
+            root
+        )  # MigrationRunner already imported at module level
         return runner.migrate_down(target=target, count=count)
     except MigrationError as e:
         raise RunnerError(f"Rollback failed: {e}") from e
