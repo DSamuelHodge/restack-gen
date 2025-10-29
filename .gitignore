@@ -99,6 +99,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+venv311/
 
 # Spyder project settings
 .spyderproject
@@ -130,6 +131,7 @@ dmypy.json
 .DS_Store
 
 # Generated projects (for testing)
+/examples/
 examples/demo/
 examples/test_*/
 
