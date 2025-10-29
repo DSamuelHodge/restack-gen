@@ -18,8 +18,8 @@ class TemplateRenderer:
 
     def __init__(self) -> None:
         """Initialize the template renderer with Jinja2 environment."""
-        templates_dir = Path(__file__).parent / "templates"
-        self.env = Environment(
+        templates_dir: Path = Path(__file__).parent / "templates"
+        self.env: Environment = Environment(
             loader=FileSystemLoader(templates_dir),
             trim_blocks=True,
             lstrip_blocks=True,

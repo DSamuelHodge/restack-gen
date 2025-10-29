@@ -34,8 +34,8 @@ def find_service_file(base_dir: str | Path = ".") -> Path:
     Raises:
         RunnerError: If service.py cannot be found
     """
-    root = Path(base_dir).resolve()
-    service_path = root / "server" / "service.py"
+    root: Path = Path(base_dir).resolve()
+    service_path: Path = root / "server" / "service.py"
 
     if not service_path.exists():
         raise RunnerError(
@@ -55,8 +55,8 @@ def load_env_file(base_dir: str | Path = ".") -> dict[str, str]:
     Returns:
         Dictionary of environment variables loaded from .env
     """
-    root = Path(base_dir).resolve()
-    env_file = root / ".env"
+    root: Path = Path(base_dir).resolve()
+    env_file: Path = root / ".env"
 
     env_vars: dict[str, str] = {}
     if env_file.exists():
@@ -65,6 +65,8 @@ def load_env_file(base_dir: str | Path = ".") -> dict[str, str]:
                 line = line.strip()
                 if line and not line.startswith("#"):
                     if "=" in line:
+                        key: str
+                        value: str
                         key, value = line.split("=", 1)
                         env_vars[key.strip()] = value.strip()
 
@@ -88,13 +90,13 @@ def start_service(
         RunnerError: If service cannot be started
     """
     try:
-        service_path = find_service_file(base_dir)
+        service_path: Path = find_service_file(base_dir)
     except RunnerError as e:
         raise RunnerError(str(e)) from e
 
     # Load environment variables from .env if present
-    env_vars = load_env_file(base_dir)
-    env = {**os.environ, **env_vars}
+    env_vars: dict[str, str] = load_env_file(base_dir)
+    env: dict[str, str] = {**os.environ, **env_vars}
 
     # If config_path provided, set it as environment variable for the service to use
     if config_path:
@@ -102,7 +104,7 @@ def start_service(
 
     # Execute service.py as a subprocess for proper signal handling
     try:
-        process = subprocess.Popen(
+        process: subprocess.Popen[bytes] = subprocess.Popen(
             [sys.executable, str(service_path)],
             env=env,
             cwd=str(Path(base_dir).resolve()),
@@ -123,7 +125,7 @@ def start_service(
         signal.signal(signal.SIGTERM, handle_signal)
 
         # Wait for process to complete
-        exit_code = process.wait()
+        exit_code: int = process.wait()
         sys.exit(exit_code)
 
     except FileNotFoundError:
@@ -144,11 +146,10 @@ def get_migration_status(target: str | None = None) -> list[MigrationStatus]:
     Raises:
         RunnerError: If migration status check fails
     """
-    from restack_gen.migration import MigrationRunner
 
     try:
-        root = Path.cwd()
-        runner = MigrationRunner(root)
+        root: Path = Path.cwd()
+        runner: MigrationRunner = MigrationRunner(root)  # MigrationRunner already imported at module level
         return runner.get_status(target=target)
     except Exception as e:
         raise RunnerError(f"Failed to get migration status: {e}") from e
@@ -167,11 +168,10 @@ def run_migrations_up(target: str | None = None, count: int | None = None) -> li
     Raises:
         RunnerError: If migration fails
     """
-    from restack_gen.migration import MigrationError, MigrationRunner
 
     try:
-        root = Path.cwd()
-        runner = MigrationRunner(root)
+        root: Path = Path.cwd()
+        runner: MigrationRunner = MigrationRunner(root)  # MigrationRunner already imported at module level
         return runner.migrate_up(target=target, count=count)
     except MigrationError as e:
         raise RunnerError(f"Migration failed: {e}") from e
@@ -190,11 +190,10 @@ def run_migrations_down(target: str | None = None, count: int = 1) -> list[str]:
     Raises:
         RunnerError: If rollback fails
     """
-    from restack_gen.migration import MigrationError, MigrationRunner
 
     try:
-        root = Path.cwd()
-        runner = MigrationRunner(root)
+        root: Path = Path.cwd()
+        runner: MigrationRunner = MigrationRunner(root)  # MigrationRunner already imported at module level
         return runner.migrate_down(target=target, count=count)
     except MigrationError as e:
         raise RunnerError(f"Rollback failed: {e}") from e

@@ -13,6 +13,9 @@ Restack Gen is a convention-over-configuration CLI that scaffolds Restack agents
 
 ## Installation
 
+
+**Note:** Until this repository is published to PyPI, install using  `git clone https://github.com/DSamuelHodge/restack-gen.git` and `pip install -e .` from the project root.
+
 Install via pip (recommended using `uv` if available):
 
 ```powershell

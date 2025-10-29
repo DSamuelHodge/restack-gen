@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import Any
 
 # Base classes selected at runtime
-BaseModelBase: Any
-SettingsBaseBase: Any
+BaseModelBase: type[Any]
+SettingsBaseBase: type[Any]
 
 try:
     # Prefer Pydantic v2
