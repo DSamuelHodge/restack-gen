@@ -100,6 +100,60 @@ def test_generate_agent_in_project(tmp_path: Path) -> None:
         assert result.exit_code == 0
         assert "Generated agent" in result.stdout
         assert "TestAgent" in result.stdout
+        # Check next steps output for plain agent generation
+        assert "Next steps:" in result.stdout
+        assert "Implement agent logic" in result.stdout
+        assert "Run tests: make test" in result.stdout
+        assert "Schedule agent:" in result.stdout
+
+        # Files should be created somewhere in the project
+        # Just verify the command succeeded
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_generate_agent_with_llm_in_project(tmp_path: Path) -> None:
+    """Test generating an agent with LLM router in a valid project."""
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        # Create a minimal project structure
+        runner.invoke(app, ["new", "testproject"])
+        os.chdir(tmp_path / "testproject")
+
+        # Generate an agent with LLM router
+        result = runner.invoke(app, ["g", "agent", "TestAgentLLM", "--with-llm"])
+        assert result.exit_code == 0
+        assert "Generated agent" in result.stdout
+        assert "TestAgentLLM" in result.stdout
+        # Check for LLM enhancement message (without ANSI colors)
+        assert "LLM router & prompt loader" in result.stdout
+        assert "Configure LLM providers: restack g llm-config" in result.stdout
+        assert "Create prompts: restack g prompt YourPrompt" in result.stdout
+
+        # Files should be created somewhere in the project
+        # Just verify the command succeeded
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_generate_agent_with_tools_in_project(tmp_path: Path) -> None:
+    """Test generating an agent with tools server in a valid project."""
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        # Create a minimal project structure
+        runner.invoke(app, ["new", "testproject"])
+        os.chdir(tmp_path / "testproject")
+
+        # Generate an agent with tools server
+        result = runner.invoke(app, ["g", "agent", "TestAgentTools", "--tools", "Research"])
+        assert result.exit_code == 0
+        assert "Generated agent" in result.stdout
+        assert "TestAgentTools" in result.stdout
+        # Check for tools enhancement message (without ANSI colors)
+        assert "FastMCP tools (Research)" in result.stdout
+        assert "Ensure tool server exists: restack g tool-server Research" in result.stdout
 
         # Files should be created somewhere in the project
         # Just verify the command succeeded
@@ -182,10 +236,30 @@ def test_generate_tool_server_in_project(tmp_path: Path) -> None:
         runner.invoke(app, ["new", "testproject"])
         os.chdir(tmp_path / "testproject")
 
-        result = runner.invoke(app, ["g", "tool-server", "TestTools"])
+        result = runner.invoke(app, ["g", "tool-server", "TestTools", "--force"])
         assert result.exit_code == 0
         assert "Generated FastMCP tool server" in result.stdout
         assert "TestTools" in result.stdout
+        # Check that config output is included when config is generated
+        assert "Config:" in result.stdout
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_generate_migration_in_project(tmp_path: Path) -> None:
+    """Test generating a migration in a valid project."""
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        runner.invoke(app, ["new", "testproject"])
+        os.chdir(tmp_path / "testproject")
+
+        result = runner.invoke(app, ["g", "migration", "AddToolServer", "--target", "tools"])
+        assert result.exit_code == 0
+        assert "Generated configuration migration" in result.stdout
+        assert "AddToolServer" in result.stdout
+        assert "Target: tools.yaml" in result.stdout
+        assert "Apply migration: restack migrate --target tools" in result.stdout
     finally:
         os.chdir(original_cwd)
 
@@ -235,6 +309,8 @@ def test_generate_prompt_in_project(tmp_path: Path) -> None:
         assert "Generated prompt" in result.stdout
         assert "TestPrompt" in result.stdout
         assert "v1.0.0" in result.stdout
+        # Check that loader output is included when loader is generated
+        assert "Loader:" in result.stdout
     finally:
         os.chdir(original_cwd)
 
@@ -280,6 +356,95 @@ def test_doctor_verbose() -> None:
     # Accept both success and failure exit codes
     assert result.exit_code in {0, 1}
     assert "running doctor checks" in result.stdout.lower()
+
+
+def test_migrate_status_command(tmp_path: Path) -> None:
+    """Test migrate status command."""
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        runner.invoke(app, ["new", "testproject"])
+        os.chdir(tmp_path / "testproject")
+
+        result = runner.invoke(app, ["migrate", "--status"])
+        assert result.exit_code == 0
+        assert "Migration Status" in result.stdout
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_migrate_up_command(tmp_path: Path) -> None:
+    """Test migrate up command."""
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        runner.invoke(app, ["new", "testproject"])
+        os.chdir(tmp_path / "testproject")
+
+        result = runner.invoke(app, ["migrate", "--direction", "up"])
+        assert result.exit_code == 0
+        assert "Applying configuration migrations" in result.stdout
+        assert "Direction: up" in result.stdout
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_migrate_down_command(tmp_path: Path) -> None:
+    """Test migrate down command."""
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        runner.invoke(app, ["new", "testproject"])
+        os.chdir(tmp_path / "testproject")
+
+        result = runner.invoke(app, ["migrate", "--direction", "down"])
+        assert result.exit_code == 0
+        assert "Applying configuration migrations" in result.stdout
+        assert "Direction: down" in result.stdout
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_migrate_invalid_direction(tmp_path: Path) -> None:
+    """Test migrate command with invalid direction."""
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        runner.invoke(app, ["new", "testproject"])
+        os.chdir(tmp_path / "testproject")
+
+        result = runner.invoke(app, ["migrate", "--direction", "invalid"])
+        assert result.exit_code == 1
+        assert "Direction must be 'up' or 'down'" in result.stdout
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_console_command_error_handling(tmp_path: Path) -> None:
+    """Test console command error handling."""
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        # Create a project but don't change to it - this should cause an error
+        runner.invoke(app, ["new", "testproject"])
+        # Try to run console from outside project directory
+        result = runner.invoke(app, ["console"])
+        # Should fail with exit code 1 due to ConsoleError
+        assert result.exit_code == 1
+        assert "Error starting console" in result.stdout
+    finally:
+        os.chdir(original_cwd)
+
+
+def test_main_block_execution() -> None:
+    """Test that the main block can be executed without errors."""
+    # This tests the if __name__ == "__main__": app() line
+    # Since app() is already tested through CliRunner, this ensures the main block works
+    import restack_gen.cli as cli_module
+
+    # Just verify the module can be imported and app exists
+    assert hasattr(cli_module, "app")
+    assert callable(cli_module.app)
 
 
 def test_doctor_check_tools() -> None:

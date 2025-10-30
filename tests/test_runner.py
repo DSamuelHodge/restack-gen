@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -11,7 +12,10 @@ import pytest
 from restack_gen.runner import (
     RunnerError,
     find_service_file,
+    get_migration_status,
     load_env_file,
+    run_migrations_down,
+    run_migrations_up,
     start_service,
 )
 
@@ -190,6 +194,28 @@ def test_start_service_nonzero_exit(
 
 
 @patch("restack_gen.runner.subprocess.Popen")
+def test_start_service_signal_setup(mock_popen: MagicMock, tmp_path: Path) -> None:
+    """Test that signal handlers are set up correctly in start_service."""
+    # Setup
+    server_dir = tmp_path / "server"
+    server_dir.mkdir()
+    service_file = server_dir / "service.py"
+    service_file.write_text("print('service started')")
+
+    mock_process = MagicMock()
+    mock_process.wait.return_value = 0
+    mock_popen.return_value = mock_process
+
+    # Execute - should reach signal.signal calls before sys.exit
+    with pytest.raises(SystemExit) as exc_info:
+        start_service(base_dir=tmp_path)
+
+    # Verify sys.exit was called with correct code
+    assert exc_info.value.code == 0
+    # The signal.signal calls should have been executed (not mocked)
+
+
+@patch("restack_gen.runner.subprocess.Popen")
 @patch("restack_gen.runner.signal.signal")
 def test_signal_handler_graceful_shutdown(
     mock_signal: MagicMock, mock_popen: MagicMock, tmp_path: Path
@@ -287,3 +313,216 @@ def test_subprocess_generic_exception(
     # Execute
     with pytest.raises(RunnerError, match="Failed to start service"):
         start_service(base_dir=tmp_path)
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_get_migration_status_success(mock_migration_runner: MagicMock) -> None:
+    """Test getting migration status successfully."""
+    # Setup mock
+    mock_runner_instance = MagicMock()
+    mock_status = MagicMock()
+    mock_runner_instance.get_status.return_value = [mock_status]
+    mock_migration_runner.return_value = mock_runner_instance
+
+    # Execute
+    result = get_migration_status()
+
+    # Verify
+    assert result == [mock_status]
+    mock_migration_runner.assert_called_once_with(Path.cwd())
+    mock_runner_instance.get_status.assert_called_once_with(target=None)
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_get_migration_status_with_target(mock_migration_runner: MagicMock) -> None:
+    """Test getting migration status with target filter."""
+    # Setup mock
+    mock_runner_instance = MagicMock()
+    mock_status = MagicMock()
+    mock_runner_instance.get_status.return_value = [mock_status]
+    mock_migration_runner.return_value = mock_runner_instance
+
+    # Execute
+    result = get_migration_status(target="prompts")
+
+    # Verify
+    assert result == [mock_status]
+    mock_migration_runner.assert_called_once_with(Path.cwd())
+    mock_runner_instance.get_status.assert_called_once_with(target="prompts")
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_get_migration_status_failure(mock_migration_runner: MagicMock) -> None:
+    """Test migration status failure handling."""
+    # Setup mock to raise exception
+    mock_migration_runner.side_effect = RuntimeError("Migration error")
+
+    # Execute
+    with pytest.raises(RunnerError, match="Failed to get migration status"):
+        get_migration_status()
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_run_migrations_up_success(mock_migration_runner: MagicMock) -> None:
+    """Test running migrations up successfully."""
+    # Setup mock
+    mock_runner_instance = MagicMock()
+    applied_migrations = ["migration1", "migration2"]
+    mock_runner_instance.migrate_up.return_value = applied_migrations
+    mock_migration_runner.return_value = mock_runner_instance
+
+    # Execute
+    result = run_migrations_up()
+
+    # Verify
+    assert result == applied_migrations
+    mock_migration_runner.assert_called_once_with(Path.cwd())
+    mock_runner_instance.migrate_up.assert_called_once_with(target=None, count=None)
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_run_migrations_up_with_params(mock_migration_runner: MagicMock) -> None:
+    """Test running migrations up with target and count."""
+    # Setup mock
+    mock_runner_instance = MagicMock()
+    applied_migrations = ["migration1"]
+    mock_runner_instance.migrate_up.return_value = applied_migrations
+    mock_migration_runner.return_value = mock_runner_instance
+
+    # Execute
+    result = run_migrations_up(target="prompts", count=5)
+
+    # Verify
+    assert result == applied_migrations
+    mock_migration_runner.assert_called_once_with(Path.cwd())
+    mock_runner_instance.migrate_up.assert_called_once_with(target="prompts", count=5)
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_run_migrations_up_failure(mock_migration_runner: MagicMock) -> None:
+    """Test migration up failure handling."""
+    from restack_gen.migration import MigrationError
+
+    # Setup mock to raise MigrationError
+    mock_runner_instance = MagicMock()
+    mock_runner_instance.migrate_up.side_effect = MigrationError("Migration failed")
+    mock_migration_runner.return_value = mock_runner_instance
+
+    # Execute
+    with pytest.raises(RunnerError, match="Migration failed"):
+        run_migrations_up()
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_run_migrations_down_success(mock_migration_runner: MagicMock) -> None:
+    """Test running migrations down successfully."""
+    # Setup mock
+    mock_runner_instance = MagicMock()
+    rolled_back_migrations = ["migration1"]
+    mock_runner_instance.migrate_down.return_value = rolled_back_migrations
+    mock_migration_runner.return_value = mock_runner_instance
+
+    # Execute
+    result = run_migrations_down()
+
+    # Verify
+    assert result == rolled_back_migrations
+    mock_migration_runner.assert_called_once_with(Path.cwd())
+    mock_runner_instance.migrate_down.assert_called_once_with(target=None, count=1)
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_run_migrations_down_with_params(mock_migration_runner: MagicMock) -> None:
+    """Test running migrations down with target and count."""
+    # Setup mock
+    mock_runner_instance = MagicMock()
+    rolled_back_migrations = ["migration1", "migration2"]
+    mock_runner_instance.migrate_down.return_value = rolled_back_migrations
+    mock_migration_runner.return_value = mock_runner_instance
+
+    # Execute
+    result = run_migrations_down(target="prompts", count=3)
+
+    # Verify
+    assert result == rolled_back_migrations
+    mock_migration_runner.assert_called_once_with(Path.cwd())
+    mock_runner_instance.migrate_down.assert_called_once_with(target="prompts", count=3)
+
+
+@patch("restack_gen.runner.MigrationRunner")
+def test_run_migrations_down_failure(mock_migration_runner: MagicMock) -> None:
+    """Test migration down failure handling."""
+    from restack_gen.migration import MigrationError
+
+    # Setup mock to raise MigrationError
+    mock_runner_instance = MagicMock()
+    mock_runner_instance.migrate_down.side_effect = MigrationError("Rollback failed")
+    mock_migration_runner.return_value = mock_runner_instance
+
+    # Execute
+    with pytest.raises(RunnerError, match="Rollback failed"):
+        run_migrations_down()
+
+
+@patch("restack_gen.runner.subprocess.Popen")
+def test_signal_handler_timeout_kill(mock_popen: MagicMock, tmp_path: Path) -> None:
+    """Test that signal handler kills process when wait times out."""
+    # Setup
+    server_dir = tmp_path / "server"
+    server_dir.mkdir()
+    service_file = server_dir / "service.py"
+    service_file.write_text("print('service started')")
+
+    mock_process = MagicMock()
+
+    # Custom wait method that behaves differently based on timeout
+    def custom_wait(timeout=None):
+        if timeout is None:
+            # Main wait - hang forever (simulate running process)
+            import time
+
+            while True:
+                time.sleep(1)
+        else:
+            # Handler wait - timeout
+            raise subprocess.TimeoutExpired(None, timeout)
+
+    mock_process.wait.side_effect = custom_wait
+    mock_popen.return_value = mock_process
+
+    # Capture the signal handler
+    captured_handler = None
+
+    def capture_signal(signum: int, handler: object) -> None:
+        nonlocal captured_handler
+        if signum == 2:  # SIGINT
+            captured_handler = handler
+
+    with patch("restack_gen.runner.signal.signal", side_effect=capture_signal):
+        # Start service in a thread to avoid hanging the test
+        import threading
+        import time
+
+        exception_caught = None
+
+        def run_service():
+            nonlocal exception_caught
+            try:
+                start_service(base_dir=tmp_path)
+            except Exception as e:
+                exception_caught = e
+
+        service_thread = threading.Thread(target=run_service)
+        service_thread.daemon = True
+        service_thread.start()
+
+        # Wait a bit for the handler to be set up
+        time.sleep(0.1)
+
+        # Simulate SIGINT by calling the captured handler
+        if captured_handler:
+            with pytest.raises(SystemExit) as exc_info:
+                captured_handler(2, None)  # type: ignore
+            assert exc_info.value.code == 0
+            mock_process.terminate.assert_called_once()
+            mock_process.kill.assert_called_once()

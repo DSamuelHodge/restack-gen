@@ -38,6 +38,36 @@ def test_load_module_invalid_path() -> None:
         _load_module(Path("/nonexistent/module.py"))
 
 
+def test_load_module_invalid_spec() -> None:
+    """Test loading module with invalid spec raises ImportError."""
+    with (
+        patch("importlib.util.spec_from_file_location") as mock_spec,
+        patch("pathlib.Path.exists", return_value=True),
+    ):
+        # Mock spec_from_file_location to return None
+        mock_spec.return_value = None
+
+        module_file = Path("/some/path/module.py")
+        with pytest.raises(ImportError, match="Could not create spec for module"):
+            _load_module(module_file)
+
+
+def test_load_module_spec_without_loader() -> None:
+    """Test loading module with spec that has no loader raises ImportError."""
+    with (
+        patch("importlib.util.spec_from_file_location") as mock_spec,
+        patch("pathlib.Path.exists", return_value=True),
+    ):
+        # Mock spec with None loader
+        mock_spec_obj = Mock()
+        mock_spec_obj.loader = None
+        mock_spec.return_value = mock_spec_obj
+
+        module_file = Path("/some/path/module.py")
+        with pytest.raises(ImportError, match="Could not create spec for module"):
+            _load_module(module_file)
+
+
 @patch("restack_gen.console.importlib.import_module")
 def test_start_console_loads_settings(mock_import: Mock, test_project: Path) -> None:
     """Test that start_console loads settings module and launches console."""
@@ -139,3 +169,66 @@ def test_start_console_sets_env_var(mock_import: Mock, test_project: Path) -> No
             start_console("config/dev.toml")
 
     assert os.environ["RESTACK_CONFIG"] == "config/dev.toml"
+
+
+@patch("restack_gen.console.importlib.import_module")
+def test_start_console_missing_settings_attr(mock_import: Mock, test_project: Path) -> None:
+    """Test that start_console handles missing settings attribute gracefully."""
+    # Mock IPython module
+    mock_ipython = MagicMock()
+    mock_embed = MagicMock(side_effect=SystemExit(0))
+    mock_ipython.embed = mock_embed
+
+    # Create a simple object that doesn't have a settings attribute
+    class MockSettingsModule:
+        pass
+
+    mock_settings_module = MockSettingsModule()
+    mock_import.return_value = mock_settings_module
+
+    with patch.dict(sys.modules, {"IPython": mock_ipython}):
+        with pytest.raises(SystemExit):
+            start_console("config/dev.toml")
+
+    # Verify settings were imported
+    mock_import.assert_called_once_with("testapp.common.settings")
+
+    # Verify embed was called with correct namespace
+    call_args = mock_embed.call_args
+    user_ns = call_args.kwargs["user_ns"]
+    assert "settings" in user_ns
+    assert user_ns["settings"] == {}  # Should use default empty dict
+
+
+@patch("restack_gen.console.importlib.import_module")
+def test_start_console_src_dir_already_in_path(mock_import: Mock, test_project: Path) -> None:
+    """Test that start_console skips sys.path.insert when src_dir is already in path."""
+    # Mock IPython module
+    mock_ipython = MagicMock()
+    mock_embed = MagicMock(side_effect=SystemExit(0))
+    mock_ipython.embed = mock_embed
+
+    mock_settings = MagicMock()
+    mock_settings.settings = {}
+    mock_import.return_value = mock_settings
+
+    # Get the src_dir path that would be used
+    src_dir = test_project / "src"
+
+    # Add src_dir to sys.path before calling start_console
+    sys.path.insert(0, str(src_dir))
+
+    try:
+        with patch.dict(sys.modules, {"IPython": mock_ipython}):
+            with pytest.raises(SystemExit):
+                start_console("config/dev.toml")
+
+        # Verify settings were imported
+        mock_import.assert_called_once_with("testapp.common.settings")
+
+        # Verify embed was called
+        mock_embed.assert_called_once()
+    finally:
+        # Clean up sys.path
+        if str(src_dir) in sys.path:
+            sys.path.remove(str(src_dir))

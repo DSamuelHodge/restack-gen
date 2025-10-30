@@ -1,6 +1,7 @@
 """Tests for configuration migration system."""
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -155,11 +156,42 @@ class TestMigrationRunner:
         loaded = runner._load_state()
         assert loaded == state
 
+    def test_save_state_file_error(self, tmp_path: Path) -> None:
+        """Test saving state with file access error."""
+        runner = MigrationRunner(tmp_path)
+        state = {"applied": ["test"]}
+
+        # Mock open to raise OSError
+        with patch("builtins.open", side_effect=OSError("Permission denied")):
+            with pytest.raises(MigrationError, match="Failed to save migration state"):
+                runner._save_state(state)
+
     def test_load_state_missing_file(self, tmp_path: Path) -> None:
         """Test loading state when file doesn't exist."""
         runner = MigrationRunner(tmp_path)
         state = runner._load_state()
         assert state == {"applied": []}
+
+    def test_load_state_corrupted_json(self, tmp_path: Path) -> None:
+        """Test loading state with corrupted JSON file."""
+        runner = MigrationRunner(tmp_path)
+        # Create corrupted JSON file
+        runner.state_file.parent.mkdir(parents=True, exist_ok=True)
+        runner.state_file.write_text("{invalid json")
+
+        with pytest.raises(MigrationError, match="Failed to load migration state"):
+            runner._load_state()
+
+    def test_load_state_file_error(self, tmp_path: Path) -> None:
+        """Test loading state with file access error."""
+        runner = MigrationRunner(tmp_path)
+        runner.state_file.parent.mkdir(parents=True, exist_ok=True)
+        runner.state_file.write_text('{"applied": []}')
+
+        # Mock open to raise OSError
+        with patch("builtins.open", side_effect=OSError("Permission denied")):
+            with pytest.raises(MigrationError, match="Failed to load migration state"):
+                runner._load_state()
 
     def test_get_migration_files_sorted(self, tmp_path: Path) -> None:
         """Test migration files are returned sorted."""
@@ -192,6 +224,81 @@ class TestMigrationRunner:
 
         assert len(prompts_files) == 1
         assert "prompts" in prompts_files[0].stem
+
+    def test_parse_migration_name_no_underscore(self, tmp_path: Path) -> None:
+        """Test _parse_migration_name with filename containing no underscore."""
+        runner = MigrationRunner(tmp_path)
+        filepath = Path("20250101000000.py")  # No underscore in name
+
+        timestamp, name = runner._parse_migration_name(filepath)
+        assert timestamp == "20250101000000"
+        assert name == "20250101000000"
+
+    def test_load_migration_module_spec_none(self, tmp_path: Path) -> None:
+        """Test _load_migration_module when spec_from_file_location returns None."""
+        runner = MigrationRunner(tmp_path)
+        migration_file = tmp_path / "test_migration.py"
+        migration_file.write_text(
+            "class TestMigration:\n    def up(self): pass\n    def down(self): pass"
+        )
+
+        with patch("importlib.util.spec_from_file_location", return_value=None):
+            with pytest.raises(MigrationError, match="Cannot load module spec"):
+                runner._load_migration_module(migration_file)
+
+    def test_load_migration_module_no_loader(self, tmp_path: Path) -> None:
+        """Test _load_migration_module when spec has no loader."""
+        runner = MigrationRunner(tmp_path)
+        migration_file = tmp_path / "test_migration.py"
+        migration_file.write_text(
+            "class TestMigration:\n    def up(self): pass\n    def down(self): pass"
+        )
+
+        mock_spec = MagicMock()
+        mock_spec.loader = None
+
+        with patch("importlib.util.spec_from_file_location", return_value=mock_spec):
+            with pytest.raises(MigrationError, match="Cannot load module spec"):
+                runner._load_migration_module(migration_file)
+
+    def test_load_migration_module_no_class_found(self, tmp_path: Path) -> None:
+        """Test _load_migration_module when no migration class with up/down methods is found."""
+        runner = MigrationRunner(tmp_path)
+        migration_file = tmp_path / "test_migration.py"
+        migration_file.write_text("# No migration class here\n\ndef some_function():\n    pass")
+
+        with pytest.raises(MigrationError, match="No migration class found"):
+            runner._load_migration_module(migration_file)
+
+    def test_migrate_down_error_handling(self, tmp_path: Path) -> None:
+        """Test migrate_down handles errors during rollback."""
+        migration_dir = tmp_path / "config" / "migrations"
+        migration_dir.mkdir(parents=True)
+
+        # Create migration that fails on down()
+        migration_file = migration_dir / "20250101000000_failing_down.py"
+        migration_file.write_text(
+            """
+class FailingDownMigration:
+    def up(self):
+        pass  # up succeeds
+
+    def down(self):
+        raise ValueError("Down migration failed")
+"""
+        )
+
+        runner = MigrationRunner(tmp_path)
+
+        # Apply the migration first
+        applied = runner.migrate_up()
+        assert len(applied) == 1
+
+        # Try to rollback - should fail
+        with pytest.raises(
+            MigrationError, match="Rollback of 20250101000000_failing_down.py failed"
+        ):
+            runner.migrate_down()
 
 
 class TestMigrationExecution:

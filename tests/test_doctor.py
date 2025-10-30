@@ -223,6 +223,27 @@ def test_check_package_versions() -> None:
     # Should not fail - either all packages meet requirements or warnings shown
 
 
+def test_check_package_versions_all_good(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test package version checking when all packages meet requirements."""
+    import importlib.metadata
+
+    # Mock version() to return versions that meet minimum requirements
+    def mock_version(pkg_name: str) -> str:
+        versions = {
+            "restack-ai": "1.2.3",
+            "pydantic": "2.7.0",
+            "httpx": "0.27.0",
+        }
+        return versions.get(pkg_name, "1.0.0")
+
+    monkeypatch.setattr(importlib.metadata, "version", mock_version)
+
+    res = doctor.check_package_versions()
+    assert res.name == "package_versions"
+    assert res.status == "ok"
+    assert "All package versions meet recommendations" in res.message
+
+
 def test_check_write_permissions(tmp_path: Path) -> None:
     """Test write permissions check."""
     # Create some directories
@@ -244,6 +265,34 @@ def test_check_write_permissions_no_dirs(tmp_path: Path) -> None:
     assert res.name == "write_permissions"
     # Should be ok when directories don't exist (nothing to check)
     assert res.status == "ok"
+
+
+def test_check_write_permissions_read_only_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test write permissions check when directories exist but are read-only."""
+    import os
+
+    # Create directories
+    (tmp_path / "src").mkdir()
+    (tmp_path / "server").mkdir()
+
+    # Mock os.access to return False for write access
+    original_access = os.access
+
+    def mock_access(path, mode):
+        if mode == os.W_OK and str(path).endswith(("src", "server")):
+            return False
+        return original_access(path, mode)
+
+    monkeypatch.setattr(os, "access", mock_access)
+
+    res = doctor.check_write_permissions(tmp_path)
+    assert res.name == "write_permissions"
+    assert res.status == "fail"
+    assert "Write permission denied for some directories" in res.message
+    assert "src/ (no write access)" in res.details
+    assert "server/ (no write access)" in res.details
 
 
 def test_check_restack_engine_unreachable(tmp_path: Path, respx_mock: None) -> None:
@@ -273,10 +322,26 @@ def test_check_restack_engine_with_config(tmp_path: Path) -> None:
     settings_file = config_dir / "settings.yaml"
     settings_file.write_text("restack:\n  engine_url: http://localhost:7700\n")
 
-    # This will likely fail to connect, but should read the config
     res = doctor.check_restack_engine(tmp_path)
     assert res.name == "restack_engine"
-    assert res.status in {"ok", "fail"}  # Depends on whether engine is actually running
+    # Will be unreachable since no real server, but should read config
+    assert res.status == "fail"
+
+
+def test_check_restack_engine_client_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test Restack engine check when httpx.Client fails to initialize."""
+    import httpx
+
+    # Mock httpx.Client to raise an exception during initialization
+    def mock_client(*args, **kwargs):
+        raise RuntimeError("Client initialization failed")
+
+    monkeypatch.setattr(httpx, "Client", mock_client)
+
+    res = doctor.check_restack_engine()
+    assert res.name == "restack_engine"
+    assert res.status == "fail"
+    assert "Unable to connect to Restack engine" in res.message
 
 
 class TestLLMConfig:
@@ -703,6 +768,180 @@ class TestToolsCheckAdvanced:
         if res.status == "fail":
             assert "cannot be imported" in res.message or res.details
 
+    def test_check_tools_health_check_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test when health check raises an exception."""
+        import importlib
+
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        tools_config = config_dir / "tools.yaml"
+
+        tools_config.write_text(
+            """fastmcp:
+  servers:
+    - name: test_server
+      module: sys
+"""
+        )
+
+        # Mock fastmcp import to succeed
+        def mock_import_module(name):
+            if name == "fastmcp":
+                # Create a mock module
+                import types
+
+                return types.ModuleType("fastmcp")
+            return importlib.__import__(name)
+
+        monkeypatch.setattr(importlib, "import_module", mock_import_module)
+
+        # Mock _check_tools_health_async to raise an exception
+        async def mock_health_check(*args, **kwargs):
+            raise RuntimeError("Health check failed")
+
+        monkeypatch.setattr(doctor, "_check_tools_health_async", mock_health_check)
+
+        res = doctor.check_tools(tmp_path)
+        assert res.name == "tools"
+        assert res.status == "ok"  # Health check failure doesn't fail the overall check
+        assert "configured and importable" in res.message
+        assert "Health check unavailable" in res.details
+
+    def test_check_tools_with_server_errors(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test when health check returns servers with errors."""
+        import importlib
+
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        tools_config = config_dir / "tools.yaml"
+
+        tools_config.write_text(
+            """fastmcp:
+  servers:
+    - name: server1
+      module: sys
+    - name: server2
+      module: os
+"""
+        )
+
+        # Mock fastmcp import to succeed
+        def mock_import_module(name):
+            if name == "fastmcp":
+                # Create a mock module
+                import types
+
+                return types.ModuleType("fastmcp")
+            return importlib.__import__(name)
+
+        monkeypatch.setattr(importlib, "import_module", mock_import_module)
+
+        # Mock _check_tools_health_async to return error statuses
+        async def mock_health_check(*args, **kwargs):
+            return {
+                "server1": {"status": "error", "message": "Connection failed"},
+                "server2": {"status": "running"},
+            }
+
+        monkeypatch.setattr(doctor, "_check_tools_health_async", mock_health_check)
+
+        res = doctor.check_tools(tmp_path)
+        assert res.name == "tools"
+        assert res.status == "warn"
+        assert "1/2 tool servers have errors" in res.message
+
+    def test_check_tools_health_async_success(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test _check_tools_health_async when manager is found and health check succeeds."""
+        import asyncio
+        import importlib
+        import sys
+
+        # Create a mock manager class
+        class MockManager:
+            async def health_check_all(self):
+                return {"server1": {"status": "running"}, "server2": {"status": "healthy"}}
+
+        # Create a mock module with the manager class
+        mock_module = type(sys)("mock_module")
+        mock_module.FastMCPServerManager = MockManager
+
+        # Mock importlib.import_module to return our mock module
+        def mock_import_module(name):
+            if name == "project.common.fastmcp_manager":
+                return mock_module
+            return importlib.__import__(name)
+
+        monkeypatch.setattr(importlib, "import_module", mock_import_module)
+
+        # Create the expected directory structure: base_dir/subdir/common/fastmcp_manager.py
+        subdir = tmp_path / "project"
+        subdir.mkdir()
+        common_dir = subdir / "common"
+        common_dir.mkdir()
+        manager_file = common_dir / "fastmcp_manager.py"
+        manager_file.write_text("# Mock manager file")
+
+        # Run the async function
+        result = asyncio.run(doctor._check_tools_health_async(tmp_path))
+
+        assert "server1" in result
+        assert "server2" in result
+        assert result["server1"]["status"] == "running"
+        assert result["server2"]["status"] == "healthy"
+
+    def test_check_tools_health_async_no_manager(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test _check_tools_health_async when no manager is found."""
+        import asyncio
+
+        # Run the async function - should return empty dict when no manager found
+        result = asyncio.run(doctor._check_tools_health_async(tmp_path))
+
+        assert result == {}
+
+    def test_check_tools_health_async_exception(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test _check_tools_health_async when an exception occurs."""
+        import asyncio
+        import importlib
+        import sys
+
+        # Create a mock manager that raises an exception
+        class MockManager:
+            async def health_check_all(self):
+                raise RuntimeError("Health check failed")
+
+        # Create a mock module with the manager class
+        mock_module = type(sys)("mock_module")
+        mock_module.FastMCPServerManager = MockManager
+
+        # Mock importlib.import_module to return our mock module
+        def mock_import_module(name):
+            if name == "project.common.fastmcp_manager":
+                return mock_module
+            return importlib.__import__(name)
+
+        monkeypatch.setattr(importlib, "import_module", mock_import_module)
+
+        # Create the expected directory structure
+        common_dir = tmp_path / "common"
+        common_dir.mkdir()
+        manager_file = common_dir / "fastmcp_manager.py"
+        manager_file.write_text("# Mock manager file")
+
+        # Run the async function - should return empty dict on exception
+        result = asyncio.run(doctor._check_tools_health_async(tmp_path))
+
+        assert result == {}
+
 
 class TestDependenciesCheck:
     """Tests for dependencies checking."""
@@ -780,33 +1019,32 @@ class TestCheckRestackEngine:
 class TestWritePermissions:
     """Tests for write permissions checking."""
 
-    def test_check_write_permissions_read_only_dir(self, tmp_path: Path) -> None:
-        """Test write permissions check on read-only directory."""
+    def test_check_write_permissions_read_only_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test write permissions check when directories exist but are read-only."""
         import os
-        import stat
 
-        src_dir = tmp_path / "src"
-        src_dir.mkdir()
+        # Create directories
+        (tmp_path / "src").mkdir()
+        (tmp_path / "server").mkdir()
 
-        # Make directory read-only (platform-dependent)
-        try:
-            # Remove write permissions
-            current_mode = os.stat(src_dir).st_mode
-            os.chmod(src_dir, current_mode & ~stat.S_IWUSR & ~stat.S_IWGRP & ~stat.S_IWOTH)
+        # Mock os.access to return False for write access
+        original_access = os.access
 
-            res = doctor.check_write_permissions(tmp_path)
-            assert res.name == "write_permissions"
-            # Should detect lack of write access
-            # Note: This may not work on all platforms/filesystems
-            if res.status == "fail":
-                assert "src" in (res.details or "")
+        def mock_access(path, mode):
+            if mode == os.W_OK and str(path).endswith(("src", "server")):
+                return False
+            return original_access(path, mode)
 
-        finally:
-            # Restore permissions for cleanup
-            try:
-                os.chmod(src_dir, current_mode | stat.S_IWUSR)
-            except Exception:
-                pass
+        monkeypatch.setattr(os, "access", mock_access)
+
+        res = doctor.check_write_permissions(tmp_path)
+        assert res.name == "write_permissions"
+        assert res.status == "fail"
+        assert "Write permission denied for some directories" in res.message
+        assert "src/ (no write access)" in res.details
+        assert "server/ (no write access)" in res.details
 
 
 class TestGitStatusCheck:
