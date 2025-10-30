@@ -461,8 +461,9 @@ class TestValidateIR:
         # Simulate a type mismatch: resource exists, but type is not 'agent'
         node = Resource("foo", "agent")
         node.resource_type = "agent"
-        resources = {"foo": "workflow"}  # foo exists, but is a workflow
-        valid, error = validate_ir(node, resources=resources)
+        # Mock get_project_resources to return wrong type
+        monkeypatch.setattr("restack_gen.parser.get_project_resources", lambda: {"foo": "workflow"})
+        valid, error = validate_ir(node)
         print(f"DEBUG: valid={valid}, error={error}")
         assert not valid
         assert "not a agent" in error or "not a" in error

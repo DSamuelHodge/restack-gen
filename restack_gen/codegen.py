@@ -81,13 +81,18 @@ def generate_imports(ir: IRNode, project_name: str) -> list[str]:
 
     imports.append("from restack_ai import Workflow, step")
 
-    # Collect all resources
+    # Collect all resources and deduplicate by (name, resource_type)
     resources = _collect_resources(ir)
+    unique_resources = {}
+    for r in resources:
+        key = (r.name, r.resource_type)
+        if key not in unique_resources:
+            unique_resources[key] = r
 
     # Group by type
-    agents = [r.name for r in resources if r.resource_type == "agent"]
-    workflows = [r.name for r in resources if r.resource_type == "workflow"]
-    functions = [r.name for r in resources if r.resource_type == "function"]
+    agents = [r.name for r in unique_resources.values() if r.resource_type == "agent"]
+    workflows = [r.name for r in unique_resources.values() if r.resource_type == "workflow"]
+    functions = [r.name for r in unique_resources.values() if r.resource_type == "function"]
 
     # Add imports for each type
     if agents:

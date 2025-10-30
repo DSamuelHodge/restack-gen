@@ -434,7 +434,9 @@ def get_project_resources() -> dict[str, str]:
     return resources
 
 
-def validate_ir(ir: IRNode, project_root: Path | None = None) -> tuple[bool, str | None]:
+def validate_ir(
+    ir: IRNode, project_root: Path | None = None, resources: dict[str, str] | None = None
+) -> tuple[bool, str | None]:
     """Validate an IR tree against the current project.
 
     Checks:
@@ -456,31 +458,30 @@ def validate_ir(ir: IRNode, project_root: Path | None = None) -> tuple[bool, str
         >>> print(error)
         Resource 'NonExistent' not found in project
     """
-    try:
-        resources = get_project_resources()
-    except RuntimeError as e:
-        return False, str(e)
+    if resources is None:
+        try:
+            resources = get_project_resources()
+        except RuntimeError as e:
+            return False, str(e)
 
     def validate_node(node: IRNode) -> tuple[bool, str | None]:
         """Recursively validate a node."""
         if isinstance(node, Resource):
             # Check if resource exists
-            if node.resource_type == "unknown":
-                # Try to determine type from project
-                if node.name not in resources:
-                    return False, f"Resource '{node.name}' not found in project"
-                # Update resource type
-                node.resource_type = resources[node.name]
-            else:
-                # Validate type matches
-                if node.name not in resources:
-                    return False, f"Resource '{node.name}' not found in project"
-                if resources[node.name] != node.resource_type:
+            if node.name not in resources:
+                return False, f"Resource '{node.name}' not found in project"
+            project_type = resources[node.name]
+            # Always check for type mismatch if node.resource_type is set and not 'unknown'
+            if node.resource_type != "unknown" and node.resource_type is not None:
+                if project_type != node.resource_type:
                     return (
                         False,
-                        f"Resource '{node.name}' is a {resources[node.name]}, "
+                        f"Resource '{node.name}' is a {project_type}, "
                         f"not a {node.resource_type}",
                     )
+            else:
+                # If not set or unknown, update from project resources
+                node.resource_type = project_type
             return True, None
 
         if isinstance(node, (Sequence, Parallel)):
