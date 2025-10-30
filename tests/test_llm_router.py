@@ -10,7 +10,7 @@ from restack_gen.generator import GenerationError, generate_llm_config
 class TestLLMConfigGeneration:
     """Test LLM config generation."""
 
-    def test_generate_llm_config_creates_files(self, tmp_path, monkeypatch):
+    def test_generate_llm_config_creates_files(self, tmp_path, monkeypatch) -> None:
         """Test that generate_llm_config creates necessary files."""
         # Create a mock project structure
         project_root = tmp_path / "myproject"
@@ -37,7 +37,7 @@ class TestLLMConfigGeneration:
         assert "class LLMRouter:" in router_content
         assert "async def chat" in router_content
 
-    def test_generate_llm_config_with_kong_backend(self, tmp_path, monkeypatch):
+    def test_generate_llm_config_with_kong_backend(self, tmp_path, monkeypatch) -> None:
         """Test generation with Kong backend."""
         project_root = tmp_path / "myproject"
         project_root.mkdir()
@@ -51,7 +51,7 @@ class TestLLMConfigGeneration:
         config_content = files["config"].read_text()
         assert "backend:" in config_content
 
-    def test_generate_llm_config_without_project_fails(self, tmp_path, monkeypatch):
+    def test_generate_llm_config_without_project_fails(self, tmp_path, monkeypatch) -> None:
         """Test that generation fails outside a project."""
         monkeypatch.chdir(tmp_path)
 
@@ -59,7 +59,7 @@ class TestLLMConfigGeneration:
             with pytest.raises(GenerationError, match="Not in a restack-gen project"):
                 generate_llm_config()
 
-    def test_generate_llm_config_respects_force_flag(self, tmp_path, monkeypatch):
+    def test_generate_llm_config_respects_force_flag(self, tmp_path, monkeypatch) -> None:
         """Test that force flag allows overwriting."""
         project_root = tmp_path / "myproject"
         project_root.mkdir()
@@ -87,7 +87,7 @@ class TestLLMRouterModule:
     """Test the generated LLM router module (simulated)."""
 
     @pytest.mark.asyncio
-    async def test_llm_router_direct_openai_call(self):
+    async def test_llm_router_direct_openai_call(self) -> None:
         """Test LLM router can call OpenAI."""
         # This would test the actual router module
         # For now, we'll skip the implementation test
@@ -95,22 +95,22 @@ class TestLLMRouterModule:
         pass
 
     @pytest.mark.asyncio
-    async def test_llm_router_fallback_on_timeout(self):
+    async def test_llm_router_fallback_on_timeout(self) -> None:
         """Test fallback logic on timeout."""
         pass
 
     @pytest.mark.asyncio
-    async def test_llm_router_fallback_on_5xx(self):
+    async def test_llm_router_fallback_on_5xx(self) -> None:
         """Test fallback logic on 5xx errors."""
         pass
 
     @pytest.mark.asyncio
-    async def test_circuit_breaker_opens_after_threshold(self):
+    async def test_circuit_breaker_opens_after_threshold(self) -> None:
         """Test circuit breaker opens after failures."""
         pass
 
     @pytest.mark.asyncio
-    async def test_circuit_breaker_closes_after_cooldown(self):
+    async def test_circuit_breaker_closes_after_cooldown(self) -> None:
         """Test circuit breaker closes after cooldown."""
         pass
 
@@ -118,7 +118,7 @@ class TestLLMRouterModule:
 class TestKongBackend:
     """Test Kong AI Gateway backend functionality."""
 
-    def test_generate_llm_config_enables_kong_features(self, tmp_path, monkeypatch):
+    def test_generate_llm_config_enables_kong_features(self, tmp_path, monkeypatch) -> None:
         """Test that Kong backend enables AI features in config."""
         project_root = tmp_path / "myproject"
         project_root.mkdir()

@@ -1,5 +1,8 @@
 """Tests for Pydantic compatibility layer."""
 
+import importlib
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
@@ -376,3 +379,54 @@ class TestEdgeCasesAndBranches:
         # Should maintain config inheritance
         instance = DerivedSettings()
         assert instance.value == 1
+
+
+def test_compat_fallback_to_pydantic_v1(monkeypatch) -> None:
+    """Simulate ImportError for pydantic v2 and test v1 fallback logic."""
+    # Remove pydantic v2 modules if present
+    sys_modules_backup = sys.modules.copy()
+    monkeypatch.setitem(sys.modules, "pydantic", None)
+    monkeypatch.setitem(sys.modules, "pydantic_settings", None)
+
+    # Create fake pydantic v1 module
+    class FakeBaseModel:
+        pass
+
+    class FakeBaseSettings:
+        pass
+
+    class FakeField:
+        pass
+
+    class FakeValidationError(Exception):
+        pass
+
+    fake_pydantic = types.ModuleType("pydantic")
+    fake_pydantic.BaseModel = FakeBaseModel
+    fake_pydantic.BaseSettings = FakeBaseSettings
+    fake_pydantic.Field = FakeField
+    fake_pydantic.ValidationError = FakeValidationError
+    sys.modules["pydantic"] = fake_pydantic
+    sys.modules["pydantic_settings"] = types.ModuleType("pydantic_settings")  # Not used in v1
+
+    # Reload compat.py to trigger fallback
+    compat = importlib.reload(importlib.import_module("restack_gen.compat"))
+
+    assert compat.PYDANTIC_V2 is False
+    assert compat.BaseModelBase is FakeBaseModel
+    assert compat.SettingsBaseBase is FakeBaseSettings
+    assert compat.Field is FakeField
+    assert compat.ValidationError is FakeValidationError
+
+    # Test Config class exists and has correct attributes
+    assert hasattr(compat.BaseModel, "Config")
+    assert compat.BaseModel.Config.arbitrary_types_allowed is True
+    assert compat.BaseModel.Config.validate_assignment is True
+    assert hasattr(compat.SettingsBase, "Config")
+    assert compat.SettingsBase.Config.env_file == ".env"
+    assert compat.SettingsBase.Config.env_file_encoding == "utf-8"
+    assert compat.SettingsBase.Config.extra == "ignore"
+
+    # Restore sys.modules
+    sys.modules.clear()
+    sys.modules.update(sys_modules_backup)

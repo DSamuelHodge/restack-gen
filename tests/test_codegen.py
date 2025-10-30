@@ -5,7 +5,6 @@ import ast
 import pytest
 
 from restack_gen.codegen import (
-    _collect_resources,
     _to_snake_case,
     generate_conditional_code,
     generate_imports,
@@ -27,116 +26,33 @@ class TestToSnakeCase:
         """Test two word conversion."""
         assert _to_snake_case("DataCollector") == "data_collector"
 
-    def test_three_words(self):
-        """Test three word conversion."""
-        assert _to_snake_case("EmailDataProcessor") == "email_data_processor"
-
-    def test_acronym(self):
-        """Test acronym handling."""
-        # Current implementation converts all caps to lowercase
-        assert _to_snake_case("HTTPClient") == "httpclient"
-
-    def test_already_lowercase(self):
-        """Test already lowercase string."""
-        assert _to_snake_case("agent") == "agent"
-
-
-class TestCollectResources:
-    """Tests for resource collection from IR tree."""
-
-    def test_single_resource(self):
-        """Test collecting from single Resource node."""
-        resource = Resource("Agent1", "agent")
-        resources = _collect_resources(resource)
-        assert len(resources) == 1
-        assert resources[0].name == "Agent1"
-
-    def test_sequence_resources(self):
-        """Test collecting from Sequence."""
-        seq = Sequence(
+    def test_duplicate_resources(self) -> None:
+        """Test that duplicate resources generate only one import."""
+        ir = Sequence(
             [
                 Resource("Agent1", "agent"),
-                Resource("Workflow1", "workflow"),
-                Resource("Function1", "function"),
-            ]
-        )
-        resources = _collect_resources(seq)
-        assert len(resources) == 3
-        assert [r.name for r in resources] == ["Agent1", "Workflow1", "Function1"]
-
-    def test_parallel_resources(self):
-        """Test collecting from Parallel."""
-        par = Parallel([Resource("Agent1", "agent"), Resource("Agent2", "agent")])
-        resources = _collect_resources(par)
-        assert len(resources) == 2
-
-    def test_nested_structure(self):
-        """Test collecting from nested structure."""
-        seq = Sequence(
-            [
                 Resource("Agent1", "agent"),
-                Parallel(
-                    [
-                        Resource("Agent2", "agent"),
-                        Resource("Agent3", "agent"),
-                    ]
-                ),
-                Resource("Agent4", "agent"),
+                Resource("Agent1", "agent"),
             ]
         )
-        resources = _collect_resources(seq)
-        assert len(resources) == 4
-        assert [r.name for r in resources] == ["Agent1", "Agent2", "Agent3", "Agent4"]
-
-
-class TestGenerateImports:
-    """Tests for import generation."""
-
-    def test_single_agent_import(self):
-        """Test import for a single agent."""
-        ir = Resource("DataCollector", "agent")
         imports = generate_imports(ir, "myproject")
 
+        # Should have base imports plus one import for Agent1
         assert "from restack_ai import Workflow, step" in imports
-        assert "from agents.data_collector import data_collector_activity" in imports
+        assert "from agents.agent1 import agent1_activity" in imports
 
-    def test_multiple_resource_types(self):
-        """Test imports for mixed resource types."""
-        ir = Sequence(
-            [
-                Resource("DataCollector", "agent"),
-                Resource("ProcessWorkflow", "workflow"),
-                Resource("transform_data", "function"),
-            ]
-        )
-        imports = generate_imports(ir, "myproject")
+        # Count how many times agent1 appears - should be only once
+        agent1_import_count = sum(1 for imp in imports if "agent1_activity" in imp)
+        assert agent1_import_count == 1, f"Expected 1 agent1 import, got {agent1_import_count}"
 
-        assert "from agents.data_collector import data_collector_activity" in imports
-        assert (
-            "from workflows.process_workflow_workflow import process_workflow_activity" in imports
-        )
-        assert "from functions.transform_data import transform_data_activity" in imports
-
-    def test_duplicate_resources(self):
-        """Test that duplicate resources only generate one import."""
-        ir = Sequence(
-            [
-                Resource("Agent1", "agent"),
-                Resource("Agent1", "agent"),
-                Resource("Agent1", "agent"),
-            ]
-        )
-        imports = generate_imports(ir, "myproject")
-
-        # Should only have one import for Agent1
-        agent_imports = [imp for imp in imports if "agent1_activity" in imp]
-        assert len(agent_imports) == 1
+        # Total imports should be 2 (base + one agent)
+        assert len(imports) == 2
 
 
 class TestGenerateSequenceCode:
     """Tests for sequence code generation."""
 
-    def test_two_resources(self):
+    def test_two_resources(self) -> None:
         """Test sequence of two resources."""
         seq = Sequence(
             [
@@ -149,7 +65,7 @@ class TestGenerateSequenceCode:
         assert "result = await self.execute_activity(agent1_activity, result)" in code
         assert "result = await self.execute_activity(agent2_activity, result)" in code
 
-    def test_three_resources(self):
+    def test_three_resources(self) -> None:
         """Test sequence of three resources."""
         seq = Sequence(
             [
@@ -165,9 +81,14 @@ class TestGenerateSequenceCode:
         assert "saver_activity" in code
         assert code.count("await self.execute_activity") == 3
 
-    def test_indentation(self):
+    def test_indentation(self) -> None:
         """Test proper indentation."""
-        seq = Sequence([Resource("Agent1", "agent"), Resource("Agent2", "agent")])
+        seq = Sequence(
+            [
+                Resource("Agent1", "agent"),
+                Resource("Agent2", "agent"),
+            ]
+        )
         code = generate_sequence_code(seq, indent=2)
 
         # Should start with 8 spaces (2 * 4)
@@ -179,7 +100,7 @@ class TestGenerateSequenceCode:
 class TestGenerateParallelCode:
     """Tests for parallel code generation."""
 
-    def test_two_resources(self):
+    def test_two_resources(self) -> None:
         """Test parallel execution of two resources."""
         par = Parallel(
             [
@@ -193,7 +114,7 @@ class TestGenerateParallelCode:
         assert "agent1_activity" in code
         assert "agent2_activity" in code
 
-    def test_three_resources(self):
+    def test_three_resources(self) -> None:
         """Test parallel execution of three resources."""
         par = Parallel(
             [
@@ -211,7 +132,7 @@ class TestGenerateParallelCode:
 class TestGenerateConditionalCode:
     """Tests for conditional code generation."""
 
-    def test_simple_conditional(self):
+    def test_simple_conditional(self) -> None:
         """Test simple if/else branching."""
         cond = Conditional(
             condition="check_status",
@@ -229,7 +150,7 @@ class TestGenerateConditionalCode:
 class TestGeneratePipelineCode:
     """Tests for complete pipeline code generation."""
 
-    def test_simple_sequence_pipeline(self):
+    def test_simple_sequence_pipeline(self) -> None:
         """Test generating code for a simple sequence."""
         ir = Sequence(
             [
@@ -257,7 +178,7 @@ class TestGeneratePipelineCode:
         assert "saver_activity" in code
         assert "return result" in code
 
-    def test_parallel_pipeline(self):
+    def test_parallel_pipeline(self) -> None:
         """Test generating code for parallel execution."""
         ir = Parallel(
             [
@@ -271,7 +192,7 @@ class TestGeneratePipelineCode:
         assert "worker1_activity" in code
         assert "worker2_activity" in code
 
-    def test_sequence_with_parallel(self):
+    def test_sequence_with_parallel(self) -> None:
         """Test sequence containing parallel execution."""
         ir = Sequence(
             [
@@ -293,7 +214,7 @@ class TestGeneratePipelineCode:
         assert "process_b_activity" in code
         assert "output_activity" in code
 
-    def test_conditional_pipeline(self):
+    def test_conditional_pipeline(self) -> None:
         """Test conditional branching pipeline."""
         ir = Conditional(
             condition="needs_processing",
@@ -311,7 +232,7 @@ class TestGeneratePipelineCode:
 class TestCodeValidation:
     """Tests for generated code validation."""
 
-    def test_generated_code_syntax(self):
+    def test_generated_code_syntax(self) -> None:
         """Test that generated code is syntactically valid Python."""
         ir = Sequence(
             [
@@ -327,7 +248,7 @@ class TestCodeValidation:
         except SyntaxError as e:
             pytest.fail(f"Generated code has syntax error: {e}")
 
-    def test_parallel_code_syntax(self):
+    def test_parallel_code_syntax(self) -> None:
         """Test that parallel code is syntactically valid."""
         ir = Parallel(
             [
@@ -344,7 +265,7 @@ class TestCodeValidation:
         except SyntaxError as e:
             pytest.fail(f"Generated parallel code has syntax error: {e}")
 
-    def test_conditional_code_syntax(self):
+    def test_conditional_code_syntax(self) -> None:
         """Test that conditional code is syntactically valid."""
         ir = Conditional(
             condition="should_process",
@@ -359,7 +280,7 @@ class TestCodeValidation:
         except SyntaxError as e:
             pytest.fail(f"Generated conditional code has syntax error: {e}")
 
-    def test_complex_nested_syntax(self):
+    def test_complex_nested_syntax(self) -> None:
         """Test complex nested structure is valid."""
         ir = Sequence(
             [

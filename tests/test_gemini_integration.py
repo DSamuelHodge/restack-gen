@@ -27,7 +27,7 @@ def _import_router_from_file(py_file: Path) -> ModuleType:
 
 
 @pytest.mark.asyncio
-async def test_gemini_direct_success_parsing(tmp_path, monkeypatch):
+async def test_gemini_direct_success_parsing(tmp_path, monkeypatch) -> None:
     """Router parses a valid Gemini response via direct REST path."""
     # Arrange: temp project
     project_root = tmp_path / "myproject"
@@ -110,7 +110,7 @@ llm:
 
 
 @pytest.mark.asyncio
-async def test_gemini_200_error_body_fallback_to_openai(tmp_path, monkeypatch):
+async def test_gemini_200_error_body_fallback_to_openai(tmp_path, monkeypatch) -> None:
     """Gemini returns 200 with error body -> router falls back to OpenAI provider."""
     # Arrange: temp project
     project_root = tmp_path / "myproject"

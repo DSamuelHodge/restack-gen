@@ -23,7 +23,7 @@ def _import_router_from_file(py_file: Path) -> ModuleType:
 
 
 @pytest.mark.asyncio
-async def test_import_and_instantiation(tmp_path, monkeypatch):
+async def test_import_and_instantiation(tmp_path, monkeypatch) -> None:
     # Arrange: minimal project root
     project_root = tmp_path / "myproject"
     project_root.mkdir()

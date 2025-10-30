@@ -7,15 +7,26 @@ from restack_gen.validator import PipelineValidator, ValidationError, validate_p
 
 
 class TestValidatorResourceCollection:
+    def test_collect_unknown_node_type(self) -> None:
+        """Test _collect_resources with an unknown node type (should do nothing)."""
+
+        class DummyNode:
+            pass
+
+        node = DummyNode()
+        validator = PipelineValidator(Resource("A", "agent"))
+        # Should not raise
+        validator._collect_resources(node)
+
     """Tests for resource collection."""
 
-    def test_collect_single_resource(self):
+    def test_collect_single_resource(self) -> None:
         """Test collecting resources from single resource."""
         node = Resource("Agent1", "agent")
         validator = PipelineValidator(node)
         assert validator.all_resources == {"Agent1"}
 
-    def test_collect_sequence_resources(self):
+    def test_collect_sequence_resources(self) -> None:
         """Test collecting resources from sequence."""
         node = Sequence(
             [
@@ -27,7 +38,7 @@ class TestValidatorResourceCollection:
         validator = PipelineValidator(node)
         assert validator.all_resources == {"Agent1", "Workflow1", "Agent2"}
 
-    def test_collect_parallel_resources(self):
+    def test_collect_parallel_resources(self) -> None:
         """Test collecting resources from parallel branches."""
         node = Parallel(
             [
@@ -38,7 +49,7 @@ class TestValidatorResourceCollection:
         validator = PipelineValidator(node)
         assert validator.all_resources == {"Agent1", "Agent2"}
 
-    def test_collect_conditional_resources(self):
+    def test_collect_conditional_resources(self) -> None:
         """Test collecting resources from conditional."""
         node = Conditional(
             condition="result['type']",
@@ -48,7 +59,14 @@ class TestValidatorResourceCollection:
         validator = PipelineValidator(node)
         assert validator.all_resources == {"Handler1", "Handler2"}
 
-    def test_collect_nested_resources(self):
+    def test_collect_nested_resources(self) -> None:
+        pass
+
+    def test_collect_conditional_no_false_branch(self) -> None:
+        """Test collecting resources from a conditional with no false branch."""
+        node = Conditional(condition="x", true_branch=Resource("A", "agent"), false_branch=None)
+        validator = PipelineValidator(node)
+        assert validator.all_resources == {"A"}
         """Test collecting resources from complex nested structure."""
         node = Sequence(
             [
@@ -79,15 +97,26 @@ class TestValidatorResourceCollection:
 
 
 class TestCycleDetection:
+    def test_check_cycles_unknown_node_type(self) -> None:
+        """Test _check_cycles with an unknown node type (should not raise)."""
+
+        class DummyNode:
+            pass
+
+        validator = PipelineValidator(Resource("A", "agent"))
+        # Patch root to dummy node
+        validator.root = DummyNode()
+        validator._check_cycles()  # Should not raise
+
     """Tests for cycle detection."""
 
-    def test_no_cycle_single_resource(self):
+    def test_no_cycle_single_resource(self) -> None:
         """Test that single resource has no cycle."""
         node = Resource("Agent1", "agent")
         validator = PipelineValidator(node)
         validator._check_cycles()  # Should not raise
 
-    def test_no_cycle_simple_sequence(self):
+    def test_no_cycle_simple_sequence(self) -> None:
         """Test that simple sequence has no cycle."""
         node = Sequence(
             [
@@ -99,7 +128,7 @@ class TestCycleDetection:
         validator = PipelineValidator(node)
         validator._check_cycles()  # Should not raise
 
-    def test_no_cycle_parallel(self):
+    def test_no_cycle_parallel(self) -> None:
         """Test that parallel branches have no cycle."""
         node = Parallel(
             [
@@ -110,7 +139,7 @@ class TestCycleDetection:
         validator = PipelineValidator(node)
         validator._check_cycles()  # Should not raise
 
-    def test_no_cycle_conditional(self):
+    def test_no_cycle_conditional(self) -> None:
         """Test that conditional has no cycle."""
         node = Conditional(
             condition="result['status']",
@@ -120,7 +149,8 @@ class TestCycleDetection:
         validator = PipelineValidator(node)
         validator._check_cycles()  # Should not raise
 
-    def test_no_cycle_complex_pipeline(self):
+    def test_no_cycle_complex_pipeline(self) -> None:
+        pass
         """Test that complex pipeline has no cycle."""
         node = Sequence(
             [
@@ -144,15 +174,28 @@ class TestCycleDetection:
 
 
 class TestUnreachableNodes:
+    def test_mark_reachable_unknown_node_type(self) -> None:
+        """Test mark_reachable with an unknown node type (should raise ValidationError for unreachable resource)."""
+
+        class DummyNode:
+            pass
+
+        validator = PipelineValidator(Resource("A", "agent"))
+        # Patch root to dummy node
+        validator.root = DummyNode()
+        with pytest.raises(ValidationError) as excinfo:
+            validator._check_unreachable_nodes()
+        assert "Unreachable nodes detected: A" in str(excinfo.value)
+
     """Tests for unreachable node detection."""
 
-    def test_no_unreachable_single_resource(self):
+    def test_no_unreachable_single_resource(self) -> None:
         """Test single resource is reachable."""
         node = Resource("Agent1", "agent")
         validator = PipelineValidator(node)
         validator._check_unreachable_nodes()  # Should not raise
 
-    def test_no_unreachable_sequence(self):
+    def test_no_unreachable_sequence(self) -> None:
         """Test all sequence nodes are reachable."""
         node = Sequence(
             [
@@ -163,7 +206,7 @@ class TestUnreachableNodes:
         validator = PipelineValidator(node)
         validator._check_unreachable_nodes()  # Should not raise
 
-    def test_no_unreachable_parallel(self):
+    def test_no_unreachable_parallel(self) -> None:
         """Test all parallel branches are reachable."""
         node = Parallel(
             [
@@ -174,7 +217,8 @@ class TestUnreachableNodes:
         validator = PipelineValidator(node)
         validator._check_unreachable_nodes()  # Should not raise
 
-    def test_no_unreachable_conditional(self):
+    def test_no_unreachable_conditional(self) -> None:
+        pass
         """Test all conditional branches are reachable."""
         node = Conditional(
             condition="result['valid']",
@@ -186,9 +230,20 @@ class TestUnreachableNodes:
 
 
 class TestExecutionOrder:
+    def test_traverse_unknown_node_type(self) -> None:
+        """Test traverse with an unknown node type (should do nothing)."""
+
+        class DummyNode:
+            pass
+
+        validator = PipelineValidator(Resource("A", "agent"))
+        validator.root = DummyNode()
+        order = validator.get_execution_order()
+        assert order == []
+
     """Tests for execution order analysis."""
 
-    def test_execution_order_sequence(self):
+    def test_execution_order_sequence(self) -> None:
         """Test execution order for sequence."""
         node = Sequence(
             [
@@ -201,7 +256,7 @@ class TestExecutionOrder:
         order = validator.get_execution_order()
         assert order == ["Agent1", "Agent2", "Agent3"]
 
-    def test_execution_order_parallel(self):
+    def test_execution_order_parallel(self) -> None:
         """Test execution order includes all parallel branches."""
         node = Parallel(
             [
@@ -213,7 +268,7 @@ class TestExecutionOrder:
         order = validator.get_execution_order()
         assert set(order) == {"Agent1", "Agent2"}
 
-    def test_execution_order_conditional(self):
+    def test_execution_order_conditional(self) -> None:
         """Test execution order includes all conditional paths."""
         node = Conditional(
             condition="result['route']",
@@ -224,7 +279,8 @@ class TestExecutionOrder:
         order = validator.get_execution_order()
         assert set(order) == {"Handler1", "Handler2"}
 
-    def test_execution_order_complex(self):
+    def test_execution_order_complex(self) -> None:
+        pass
         """Test execution order for complex pipeline."""
         node = Sequence(
             [
@@ -246,16 +302,28 @@ class TestExecutionOrder:
 
 
 class TestDependencies:
+    def test_build_deps_unknown_node_type(self) -> None:
+        """Test build_deps with an unknown node type (should do nothing)."""
+
+        class DummyNode:
+            pass
+
+        validator = PipelineValidator(Resource("A", "agent"))
+        validator.root = DummyNode()
+        deps = validator.get_dependencies()
+        # Only the original resource should be present
+        assert "A" in deps
+
     """Tests for dependency analysis."""
 
-    def test_dependencies_single_resource(self):
+    def test_dependencies_single_resource(self) -> None:
         """Test dependencies for single resource."""
         node = Resource("Agent1", "agent")
         validator = PipelineValidator(node)
         deps = validator.get_dependencies()
         assert deps == {"Agent1": []}
 
-    def test_dependencies_sequence(self):
+    def test_dependencies_sequence(self) -> None:
         """Test dependencies in sequence."""
         node = Sequence(
             [
@@ -270,7 +338,7 @@ class TestDependencies:
         assert deps["Agent2"] == ["Agent1"]
         assert deps["Agent3"] == ["Agent1", "Agent2"]
 
-    def test_dependencies_parallel(self):
+    def test_dependencies_parallel(self) -> None:
         """Test dependencies in parallel branches."""
         node = Parallel(
             [
@@ -284,7 +352,8 @@ class TestDependencies:
         assert deps["Agent1"] == []
         assert deps["Agent2"] == []
 
-    def test_dependencies_after_parallel(self):
+    def test_dependencies_after_parallel(self) -> None:
+        pass
         """Test dependencies after parallel section."""
         node = Sequence(
             [
@@ -305,9 +374,20 @@ class TestDependencies:
 
 
 class TestGraphMetrics:
+    def test_analyze_unknown_node_type(self) -> None:
+        """Test analyze with an unknown node type (should do nothing)."""
+
+        class DummyNode:
+            pass
+
+        validator = PipelineValidator(Resource("A", "agent"))
+        validator.root = DummyNode()
+        metrics = validator.get_graph_metrics()
+        assert metrics["total_resources"] == 1
+
     """Tests for graph metrics calculation."""
 
-    def test_metrics_single_resource(self):
+    def test_metrics_single_resource(self) -> None:
         """Test metrics for single resource."""
         node = Resource("Agent1", "agent")
         validator = PipelineValidator(node)
@@ -317,7 +397,7 @@ class TestGraphMetrics:
         assert metrics["parallel_sections"] == 0
         assert metrics["conditional_branches"] == 0
 
-    def test_metrics_simple_sequence(self):
+    def test_metrics_simple_sequence(self) -> None:
         """Test metrics for simple sequence."""
         node = Sequence(
             [
@@ -331,7 +411,7 @@ class TestGraphMetrics:
         assert metrics["parallel_sections"] == 0
         assert metrics["conditional_branches"] == 0
 
-    def test_metrics_parallel(self):
+    def test_metrics_parallel(self) -> None:
         """Test metrics with parallel sections."""
         node = Parallel(
             [
@@ -344,7 +424,7 @@ class TestGraphMetrics:
         assert metrics["total_resources"] == 2
         assert metrics["parallel_sections"] == 1
 
-    def test_metrics_conditional(self):
+    def test_metrics_conditional(self) -> None:
         """Test metrics with conditional branches."""
         node = Conditional(
             condition="result['type']",
@@ -356,7 +436,8 @@ class TestGraphMetrics:
         assert metrics["total_resources"] == 2
         assert metrics["conditional_branches"] == 1
 
-    def test_metrics_complex(self):
+    def test_metrics_complex(self) -> None:
+        pass
         """Test metrics for complex pipeline."""
         node = Sequence(
             [
@@ -383,9 +464,47 @@ class TestGraphMetrics:
 
 
 class TestValidateFunction:
+    def test_validate_pipeline_strict_mode_promotes_warnings(self) -> None:
+        """Test that warnings are promoted to errors in strict mode."""
+        # Create a pipeline that triggers a depth warning (depth > 5)
+        node = Sequence(
+            [
+                Sequence(
+                    [
+                        Sequence(
+                            [
+                                Sequence(
+                                    [
+                                        Sequence(
+                                            [
+                                                Sequence(
+                                                    [
+                                                        Resource("A", "agent"),
+                                                        Resource("B", "agent"),
+                                                    ]
+                                                ),
+                                                Resource("C", "agent"),
+                                            ]
+                                        ),
+                                        Resource("D", "agent"),
+                                    ]
+                                ),
+                                Resource("E", "agent"),
+                            ]
+                        ),
+                        Resource("F", "agent"),
+                    ]
+                ),
+                Resource("G", "agent"),
+            ]
+        )
+        result = validate_pipeline(node, strict=True)
+        assert not result.is_valid
+        assert any("Strict mode" in e for e in result.errors)
+
     """Tests for validate_pipeline convenience function."""
 
-    def test_validate_valid_pipeline(self):
+    def test_validate_valid_pipeline(self) -> None:
         """Test validation passes for valid pipeline."""
         node = Sequence(
             [
@@ -395,7 +514,8 @@ class TestValidateFunction:
         )
         validate_pipeline(node)  # Should not raise
 
-    def test_validate_complex_pipeline(self):
+    def test_validate_complex_pipeline(self) -> None:
+        pass
         """Test validation for complex valid pipeline."""
         node = Sequence(
             [
@@ -601,7 +721,7 @@ def test_graph_metrics_with_types() -> None:
 class TestValidationErrorPaths:
     """Tests for validation error conditions that raise exceptions."""
 
-    def test_unreachable_nodes_error(self):
+    def test_unreachable_nodes_error(self) -> None:
         """Test that unreachable nodes trigger ValidationError."""
         # Create a validator with a resource in all_resources that isn't in the tree
         # This simulates a parsing error or manual construction issue
@@ -614,7 +734,7 @@ class TestValidationErrorPaths:
         with pytest.raises(ValidationError, match="Unreachable nodes detected"):
             validator._check_unreachable_nodes()
 
-    def test_validate_function_with_depth_warning(self):
+    def test_validate_function_with_depth_warning(self) -> None:
         """Test validation function with pipeline that triggers depth warning."""
         # Create a deeply nested sequence (depth > 5) - need 6 levels
         node = Sequence(
@@ -655,7 +775,7 @@ class TestValidationErrorPaths:
         assert any("Pipeline depth is high" in w for w in result.warnings)
         assert result.stats["max_depth"] > 5
 
-    def test_validate_function_with_many_resources_warning(self):
+    def test_validate_function_with_many_resources_warning(self) -> None:
         """Test validation function with pipeline that has > 20 resources."""
         # Create a sequence with 21 resources
         resources = [Resource(f"Agent{i}", "agent") for i in range(21)]
@@ -667,7 +787,7 @@ class TestValidationErrorPaths:
         assert any("Pipeline uses many resources" in w for w in result.warnings)
         assert result.stats["total_resources"] == 21
 
-    def test_validate_function_with_many_parallel_sections_warning(self):
+    def test_validate_function_with_many_parallel_sections_warning(self) -> None:
         """Test validation function with > 10 parallel sections."""
         # Create a sequence with 11 parallel sections
         parallels = [
@@ -681,7 +801,7 @@ class TestValidationErrorPaths:
         assert any("Pipeline has many parallel sections" in w for w in result.warnings)
         assert result.stats["parallel_sections"] == 11
 
-    def test_validate_function_with_many_conditionals_warning(self):
+    def test_validate_function_with_many_conditionals_warning(self) -> None:
         """Test validation function with > 10 conditional branches."""
         # Create a sequence with 11 conditionals
         conditionals = [
@@ -700,7 +820,7 @@ class TestValidationErrorPaths:
         assert any("Pipeline has many conditional branches" in w for w in result.warnings)
         assert result.stats["conditional_branches"] == 11
 
-    def test_validate_function_strict_mode_promotes_warnings(self):
+    def test_validate_function_strict_mode_promotes_warnings(self) -> None:
         """Test that strict mode promotes warnings to errors."""
         # Create a pipeline with depth > 5 to trigger warning (need 6 levels)
         node = Sequence(
@@ -747,7 +867,7 @@ class TestValidationErrorPaths:
         assert len(result_strict.errors) > 0
         assert any("Strict mode:" in e for e in result_strict.errors)
 
-    def test_validate_function_with_unreachable_nodes_error(self):
+    def test_validate_function_with_unreachable_nodes_error(self) -> None:
         """Test that unreachable nodes cause validation to fail."""
         node = Resource("A", "agent")
         validator = PipelineValidator(node)

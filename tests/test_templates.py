@@ -26,7 +26,7 @@ def common_context():
 class TestFunctionTemplate:
     """Tests for function.py.j2 template."""
 
-    def test_simple_function(self, template_env, common_context):
+    def test_simple_function(self, template_env, common_context) -> None:
         """Test function template with simple parameters."""
         template = template_env.get_template("function.py.j2")
         context = {
@@ -55,7 +55,7 @@ class TestFunctionTemplate:
         assert "from testapp.common.retries import DEFAULT_RETRY" in result
         assert "raise NotImplementedError" in result
 
-    def test_function_no_params(self, template_env, common_context):
+    def test_function_no_params(self, template_env, common_context) -> None:
         """Test function template with no parameters."""
         template = template_env.get_template("function.py.j2")
         context = {
@@ -75,7 +75,7 @@ class TestFunctionTemplate:
         assert "async def get_time() -> str:" in result
         assert "extra={" in result  # Will have empty dict with possible whitespace
 
-    def test_function_void_return(self, template_env, common_context):
+    def test_function_void_return(self, template_env, common_context) -> None:
         """Test function template with void return."""
         template = template_env.get_template("function.py.j2")
         context = {
@@ -100,7 +100,7 @@ class TestFunctionTemplate:
 class TestWorkflowTemplate:
     """Tests for workflow.py.j2 template."""
 
-    def test_workflow_with_io(self, template_env, common_context):
+    def test_workflow_with_io(self, template_env, common_context) -> None:
         """Test workflow template with input and output models."""
         template = template_env.get_template("workflow.py.j2")
         context = {
@@ -155,7 +155,7 @@ class TestWorkflowTemplate:
         assert "async def run(self, input: EmailCampaignInput) -> EmailCampaignOutput:" in result
         assert "output = EmailCampaignOutput()" in result
 
-    def test_workflow_no_io(self, template_env, common_context):
+    def test_workflow_no_io(self, template_env, common_context) -> None:
         """Test workflow template with no input/output."""
         template = template_env.get_template("workflow.py.j2")
         context = {
@@ -184,7 +184,7 @@ class TestWorkflowTemplate:
 class TestAgentTemplate:
     """Tests for agent.py.j2 template."""
 
-    def test_agent_with_events(self, template_env, common_context):
+    def test_agent_with_events(self, template_env, common_context) -> None:
         """Test agent template with events and state."""
         template = template_env.get_template("agent.py.j2")
         context = {
@@ -247,7 +247,7 @@ class TestAgentTemplate:
 class TestPipelineTemplate:
     """Tests for pipeline_orchestrator.py.j2 template."""
 
-    def test_pipeline_with_loops(self, template_env, common_context):
+    def test_pipeline_with_loops(self, template_env, common_context) -> None:
         """Test pipeline template with sequential and loop steps."""
         template = template_env.get_template("pipeline_orchestrator.py.j2")
         context = {
@@ -311,7 +311,7 @@ class TestPipelineTemplate:
 class TestServiceTemplate:
     """Tests for service.py.j2 template."""
 
-    def test_service_with_resources(self, template_env, common_context):
+    def test_service_with_resources(self, template_env, common_context) -> None:
         """Test service template with agents, workflows, and functions."""
         template = template_env.get_template("service.py.j2")
         context = {
@@ -348,7 +348,7 @@ class TestServiceTemplate:
 class TestCommonModuleTemplates:
     """Tests for common module templates."""
 
-    def test_retries_template(self, template_env, common_context):
+    def test_retries_template(self, template_env, common_context) -> None:
         """Test retries.py.j2 template."""
         template = template_env.get_template("retries.py.j2")
         context = {
@@ -363,7 +363,7 @@ class TestCommonModuleTemplates:
         assert "NO_RETRY = RetryPolicy(" in result
         assert "LONG_RETRY = RetryPolicy(" in result
 
-    def test_settings_template(self, template_env, common_context):
+    def test_settings_template(self, template_env, common_context) -> None:
         """Test settings.py.j2 template."""
         template = template_env.get_template("settings.py.j2")
         context = {
@@ -381,7 +381,7 @@ class TestCommonModuleTemplates:
         assert 'env_prefix = "TESTAPP_"' in result
         assert "settings = Settings.from_yaml(_config_file)" in result
 
-    def test_compat_template(self, template_env, common_context):
+    def test_compat_template(self, template_env, common_context) -> None:
         """Test compat.py.j2 template."""
         template = template_env.get_template("compat.py.j2")
         context = {
@@ -400,7 +400,7 @@ class TestCommonModuleTemplates:
 class TestClientTemplates:
     """Tests for client templates."""
 
-    def test_client_schedule_agent(self, template_env, common_context):
+    def test_client_schedule_agent(self, template_env, common_context) -> None:
         """Test client_schedule_agent.py.j2 template."""
         template = template_env.get_template("client_schedule_agent.py.j2")
         context = {
@@ -419,7 +419,7 @@ class TestClientTemplates:
         assert 'workflow_id = "onboarding-user-123"' in result
         assert "await client.schedule_workflow(" in result
 
-    def test_client_run_workflow(self, template_env, common_context):
+    def test_client_run_workflow(self, template_env, common_context) -> None:
         """Test client_run_workflow.py.j2 template."""
         template = template_env.get_template("client_run_workflow.py.j2")
         context = {
@@ -446,7 +446,7 @@ class TestClientTemplates:
 class TestProjectBoilerplateTemplates:
     """Tests for project boilerplate templates."""
 
-    def test_pyproject_toml(self, template_env, common_context):
+    def test_pyproject_toml(self, template_env, common_context) -> None:
         """Test pyproject.toml.j2 template."""
         template = template_env.get_template("pyproject.toml.j2")
         context = {
@@ -465,7 +465,7 @@ class TestProjectBoilerplateTemplates:
         assert "restack-ai>=0.2.0" in result
         assert "[tool.pytest.ini_options]" in result
 
-    def test_makefile(self, template_env, common_context):
+    def test_makefile(self, template_env, common_context) -> None:
         """Test Makefile.j2 template."""
         template = template_env.get_template("Makefile.j2")
         context = {
@@ -481,7 +481,7 @@ class TestProjectBoilerplateTemplates:
         assert "run:" in result
         assert "python server/service.py" in result
 
-    def test_settings_yaml(self, template_env, common_context):
+    def test_settings_yaml(self, template_env, common_context) -> None:
         """Test settings.yaml.j2 template."""
         template = template_env.get_template("settings.yaml.j2")
         context = {
@@ -513,7 +513,7 @@ class TestProjectBoilerplateTemplates:
         assert "TESTAPP_TASK_QUEUE=testapp-queue" in result
         assert "TESTAPP_PIPELINE__LOOPS__MY_LOOP__MAX=" in result
 
-    def test_readme(self, template_env, common_context):
+    def test_readme(self, template_env, common_context) -> None:
         """Test README.md.j2 template."""
         template = template_env.get_template("README.md.j2")
         context = {
@@ -530,7 +530,7 @@ class TestProjectBoilerplateTemplates:
         assert "make install-dev" in result
         assert "restack-gen v1.0.0" in result
 
-    def test_gitignore(self, template_env, common_context):
+    def test_gitignore(self, template_env, common_context) -> None:
         """Test .gitignore.j2 template."""
         template = template_env.get_template(".gitignore.j2")
         context = {
@@ -550,7 +550,7 @@ class TestProjectBoilerplateTemplates:
 class TestTemplateTestTemplates:
     """Tests for test templates."""
 
-    def test_test_agent(self, template_env, common_context):
+    def test_test_agent(self, template_env, common_context) -> None:
         """Test test_agent.py.j2 template."""
         template = template_env.get_template("test_agent.py.j2")
         context = {
@@ -575,7 +575,7 @@ class TestTemplateTestTemplates:
         assert "async def test_onboarding_handle_events():" in result
         assert "async def test_onboarding_user_registered():" in result
 
-    def test_test_workflow(self, template_env, common_context):
+    def test_test_workflow(self, template_env, common_context) -> None:
         """Test test_workflow.py.j2 template."""
         template = template_env.get_template("test_workflow.py.j2")
         context = {
@@ -595,7 +595,7 @@ class TestTemplateTestTemplates:
         assert "input_data = EmailCampaignInput(" in result
         assert "assert isinstance(result, EmailCampaignOutput)" in result
 
-    def test_test_function(self, template_env, common_context):
+    def test_test_function(self, template_env, common_context) -> None:
         """Test test_function.py.j2 template."""
         template = template_env.get_template("test_function.py.j2")
         context = {

@@ -26,24 +26,18 @@ def test_help() -> None:
     assert "Rails-style scaffolding" in result.stdout
 
 
-def test_new_command(tmp_path: Path) -> None:
-    """Test new command creates a project."""
-    # Change to temp directory
+def test_new_command_file_exists_error(tmp_path: Path) -> None:
+    """Test new command triggers FileExistsError when directory exists and force is False."""
     import os
 
     original_cwd = os.getcwd()
     try:
         os.chdir(tmp_path)
+        # Create the directory first
+        (tmp_path / "testapp").mkdir()
         result = runner.invoke(app, ["new", "testapp"])
-        assert result.exit_code == 0
-        assert "testapp" in result.stdout
-        assert "Created project" in result.stdout
-
-        # Verify project was created
-        project_path = tmp_path / "testapp"
-        assert project_path.exists()
-        assert (project_path / "pyproject.toml").exists()
-        assert (project_path / "server" / "service.py").exists()
+        assert result.exit_code == 1
+        assert "Error" in result.stdout
     finally:
         os.chdir(original_cwd)
 

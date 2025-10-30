@@ -12,13 +12,13 @@ from restack_gen.project import create_new_project
 
 class TestPromptVersioning:
     @pytest.fixture
-    def temp_project(self, tmp_path, monkeypatch):
+    def temp_project(self, tmp_path, monkeypatch) -> None:
         project_path = tmp_path / "testapp"
         create_new_project("testapp", parent_dir=tmp_path, force=False)
         monkeypatch.chdir(project_path)
         return project_path
 
-    def _add_src_to_path(self, project_path: Path):
+    def _add_src_to_path(self, project_path: Path) -> None:
         pkg = project_path.name
         src_path = project_path / "src"
         # Prepend project src for import resolution
@@ -30,7 +30,7 @@ class TestPromptVersioning:
                 sys.modules.pop(mod, None)
         return pkg
 
-    def test_generate_prompt_creates_files_and_registry(self, temp_project):
+    def test_generate_prompt_creates_files_and_registry(self, temp_project) -> None:
         files = generate_prompt("AnalyzeResearch", version="1.0.0", force=True)
         assert files["prompt"].exists()
         assert files["config"].exists()
@@ -49,7 +49,7 @@ class TestPromptVersioning:
         assert 'latest: "1.0.0"' in text
 
     @pytest.mark.asyncio
-    async def test_prompt_loader_resolves_versions(self, temp_project):
+    async def test_prompt_loader_resolves_versions(self, temp_project) -> None:
         # Create multiple versions
         generate_prompt("AnalyzeResearch", version="1.0.0", force=True)
         generate_prompt("AnalyzeResearch", version="1.2.3", force=True)
@@ -72,12 +72,12 @@ class TestPromptVersioning:
         tpl_minor = await loader.load("analyze_research", "1.2")
         assert tpl_minor.version == "1.2.3"
 
-    def test_generate_prompt_outside_project_fails(self, tmp_path, monkeypatch):
+    def test_generate_prompt_outside_project_fails(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         with pytest.raises(GenerationError):
             generate_prompt("Research", version="1.0.0")
 
-    def test_generate_prompt_refuses_overwrite_without_force(self, temp_project):
+    def test_generate_prompt_refuses_overwrite_without_force(self, temp_project) -> None:
         files = generate_prompt("Research", version="1.0.0", force=True)
         assert files["prompt"].exists()
         with pytest.raises(GenerationError):

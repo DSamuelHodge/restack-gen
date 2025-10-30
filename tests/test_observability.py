@@ -61,7 +61,7 @@ def _ensure_json(line: str) -> dict[str, Any]:
 
 
 class TestObservabilityGeneration:
-    def test_generate_llm_config_includes_observability(self, tmp_path, monkeypatch):
+    def test_generate_llm_config_includes_observability(self, tmp_path, monkeypatch) -> None:
         project_root = tmp_path / "myproj"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "myproj"\n')
@@ -76,7 +76,7 @@ class TestObservabilityGeneration:
 
 @pytest.mark.asyncio
 class TestObserveLLMCall:
-    async def test_llm_call_success_logs(self, tmp_path, monkeypatch):
+    async def test_llm_call_success_logs(self, tmp_path, monkeypatch) -> None:
         project_root = tmp_path / "p1"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "p1"\n')
@@ -118,7 +118,7 @@ class TestObserveLLMCall:
         finally:
             _detach_logger(logger, handler)
 
-    async def test_llm_call_error_logs(self, tmp_path, monkeypatch):
+    async def test_llm_call_error_logs(self, tmp_path, monkeypatch) -> None:
         project_root = tmp_path / "p2"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "p2"\n')
@@ -153,7 +153,7 @@ class TestObserveLLMCall:
 
 @pytest.mark.asyncio
 class TestObserveToolCall:
-    async def test_tool_call_success_logs(self, tmp_path, monkeypatch):
+    async def test_tool_call_success_logs(self, tmp_path, monkeypatch) -> None:
         project_root = tmp_path / "p3"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "p3"\n')
@@ -183,7 +183,7 @@ class TestObserveToolCall:
         finally:
             _detach_logger(logger, handler)
 
-    async def test_tool_call_error_logs(self, tmp_path, monkeypatch):
+    async def test_tool_call_error_logs(self, tmp_path, monkeypatch) -> None:
         project_root = tmp_path / "p4"
         project_root.mkdir()
         (project_root / "pyproject.toml").write_text('name = "p4"\n')

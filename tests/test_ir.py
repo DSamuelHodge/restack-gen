@@ -15,30 +15,30 @@ from restack_gen.ir import (
 class TestResource:
     """Tests for Resource IR node."""
 
-    def test_create_agent_resource(self):
+    def test_create_agent_resource(self) -> None:
         """Test creating an agent resource."""
         resource = Resource("DataCollector", "agent")
         assert resource.name == "DataCollector"
         assert resource.resource_type == "agent"
 
-    def test_create_workflow_resource(self):
+    def test_create_workflow_resource(self) -> None:
         """Test creating a workflow resource."""
         resource = Resource("ProcessEmail", "workflow")
         assert resource.name == "ProcessEmail"
         assert resource.resource_type == "workflow"
 
-    def test_create_function_resource(self):
+    def test_create_function_resource(self) -> None:
         """Test creating a function resource."""
         resource = Resource("transform_data", "function")
         assert resource.name == "transform_data"
         assert resource.resource_type == "function"
 
-    def test_invalid_resource_type(self):
+    def test_invalid_resource_type(self) -> None:
         """Test that invalid resource type raises error."""
         with pytest.raises(ValueError, match="Invalid resource type"):
             Resource("Test", "invalid")
 
-    def test_resource_string_representation(self):
+    def test_resource_string_representation(self) -> None:
         """Test string representation of resource."""
         resource = Resource("TestAgent", "agent")
         assert str(resource) == "Agent(TestAgent)"
@@ -49,7 +49,7 @@ class TestResource:
         resource = Resource("test_function", "function")
         assert str(resource) == "Function(test_function)"
 
-    def test_resource_equality(self):
+    def test_resource_equality(self) -> None:
         """Test resource equality comparison."""
         r1 = Resource("Test", "agent")
         r2 = Resource("Test", "agent")
@@ -64,7 +64,7 @@ class TestResource:
 class TestSequence:
     """Tests for Sequence IR node."""
 
-    def test_create_sequence(self):
+    def test_create_sequence(self) -> None:
         """Test creating a sequence node."""
         nodes = [
             Resource("Agent1", "agent"),
@@ -75,12 +75,12 @@ class TestSequence:
         assert seq.nodes[0].name == "Agent1"
         assert seq.nodes[1].name == "Workflow1"
 
-    def test_sequence_requires_two_nodes(self):
+    def test_sequence_requires_two_nodes(self) -> None:
         """Test that sequence requires at least 2 nodes."""
         with pytest.raises(ValueError, match="at least 2 nodes"):
             Sequence([Resource("Single", "agent")])
 
-    def test_sequence_string_representation(self):
+    def test_sequence_string_representation(self) -> None:
         """Test string representation of sequence."""
         seq = Sequence(
             [
@@ -91,7 +91,7 @@ class TestSequence:
         )
         assert "Agent(Agent1) → Workflow(Workflow1) → Agent(Agent2)" in str(seq)
 
-    def test_nested_sequence(self):
+    def test_nested_sequence(self) -> None:
         """Test creating nested sequences."""
         inner = Sequence(
             [
@@ -112,7 +112,7 @@ class TestSequence:
 class TestParallel:
     """Tests for Parallel IR node."""
 
-    def test_create_parallel(self):
+    def test_create_parallel(self) -> None:
         """Test creating a parallel node."""
         nodes = [
             Resource("Agent1", "agent"),
@@ -123,12 +123,12 @@ class TestParallel:
         assert par.nodes[0].name == "Agent1"
         assert par.nodes[1].name == "Agent2"
 
-    def test_parallel_requires_two_nodes(self):
+    def test_parallel_requires_two_nodes(self) -> None:
         """Test that parallel requires at least 2 nodes."""
         with pytest.raises(ValueError, match="at least 2 nodes"):
             Parallel([Resource("Single", "agent")])
 
-    def test_parallel_string_representation(self):
+    def test_parallel_string_representation(self) -> None:
         """Test string representation of parallel."""
         par = Parallel(
             [
@@ -139,7 +139,7 @@ class TestParallel:
         )
         assert "Agent(Agent1) ⇄ Agent(Agent2) ⇄ Agent(Agent3)" in str(par)
 
-    def test_nested_parallel(self):
+    def test_nested_parallel(self) -> None:
         """Test creating nested parallel nodes."""
         inner = Parallel(
             [
@@ -160,7 +160,7 @@ class TestParallel:
 class TestConditional:
     """Tests for Conditional IR node."""
 
-    def test_create_conditional_with_both_branches(self):
+    def test_create_conditional_with_both_branches(self) -> None:
         """Test creating conditional with true and false branches."""
         cond = Conditional(
             condition="result.success",
@@ -171,7 +171,7 @@ class TestConditional:
         assert cond.true_branch.name == "SuccessHandler"
         assert cond.false_branch.name == "ErrorHandler"
 
-    def test_create_conditional_with_only_true_branch(self):
+    def test_create_conditional_with_only_true_branch(self) -> None:
         """Test creating conditional with only true branch."""
         cond = Conditional(
             condition="result.success",
@@ -181,7 +181,7 @@ class TestConditional:
         assert cond.true_branch.name == "SuccessHandler"
         assert cond.false_branch is None
 
-    def test_conditional_requires_non_empty_condition(self):
+    def test_conditional_requires_non_empty_condition(self) -> None:
         """Test that conditional requires non-empty condition."""
         with pytest.raises(ValueError, match="cannot be empty"):
             Conditional(
@@ -195,7 +195,7 @@ class TestConditional:
                 true_branch=Resource("Handler", "agent"),
             )
 
-    def test_conditional_string_representation_both_branches(self):
+    def test_conditional_string_representation_both_branches(self) -> None:
         """Test string representation with both branches."""
         cond = Conditional(
             condition="result.success",
@@ -207,7 +207,7 @@ class TestConditional:
         assert "Success" in result
         assert "Error" in result
 
-    def test_conditional_string_representation_one_branch(self):
+    def test_conditional_string_representation_one_branch(self) -> None:
         """Test string representation with only true branch."""
         cond = Conditional(
             condition="result.success",
@@ -221,7 +221,7 @@ class TestConditional:
 class TestFlattenSequence:
     """Tests for flatten_sequence utility function."""
 
-    def test_flatten_nested_sequences(self):
+    def test_flatten_nested_sequences(self) -> None:
         """Test flattening nested sequences."""
         inner = Sequence(
             [
@@ -243,7 +243,7 @@ class TestFlattenSequence:
         assert all(isinstance(node, Resource) for node in flattened.nodes)
         assert [n.name for n in flattened.nodes] == ["A", "B", "C", "D"]
 
-    def test_flatten_non_sequence_unchanged(self):
+    def test_flatten_non_sequence_unchanged(self) -> None:
         """Test that non-sequence nodes are unchanged."""
         resource = Resource("Test", "agent")
         result = flatten_sequence(resource)
@@ -258,7 +258,7 @@ class TestFlattenSequence:
         result = flatten_sequence(parallel)
         assert result is parallel
 
-    def test_flatten_deeply_nested_sequences(self):
+    def test_flatten_deeply_nested_sequences(self) -> None:
         """Test flattening deeply nested sequences."""
         level3 = Sequence(
             [
@@ -287,7 +287,7 @@ class TestFlattenSequence:
 class TestFlattenParallel:
     """Tests for flatten_parallel utility function."""
 
-    def test_flatten_nested_parallel(self):
+    def test_flatten_nested_parallel(self) -> None:
         """Test flattening nested parallel nodes."""
         inner = Parallel(
             [
@@ -309,7 +309,7 @@ class TestFlattenParallel:
         assert all(isinstance(node, Resource) for node in flattened.nodes)
         assert [n.name for n in flattened.nodes] == ["A", "B", "C", "D"]
 
-    def test_flatten_non_parallel_unchanged(self):
+    def test_flatten_non_parallel_unchanged(self) -> None:
         """Test that non-parallel nodes are unchanged."""
         resource = Resource("Test", "agent")
         result = flatten_parallel(resource)
@@ -324,7 +324,7 @@ class TestFlattenParallel:
         result = flatten_parallel(sequence)
         assert result is sequence
 
-    def test_flatten_deeply_nested_parallel(self):
+    def test_flatten_deeply_nested_parallel(self) -> None:
         """Test flattening deeply nested parallel nodes."""
         level3 = Parallel(
             [
@@ -353,7 +353,7 @@ class TestFlattenParallel:
 class TestComplexIRTrees:
     """Tests for complex IR tree structures."""
 
-    def test_sequence_with_parallel_inside(self):
+    def test_sequence_with_parallel_inside(self) -> None:
         """Test sequence containing parallel nodes."""
         tree = Sequence(
             [
@@ -370,7 +370,7 @@ class TestComplexIRTrees:
         assert len(tree.nodes) == 3
         assert isinstance(tree.nodes[1], Parallel)
 
-    def test_parallel_with_sequences_inside(self):
+    def test_parallel_with_sequences_inside(self) -> None:
         """Test parallel containing sequence nodes."""
         tree = Parallel(
             [
@@ -391,7 +391,7 @@ class TestComplexIRTrees:
         assert len(tree.nodes) == 2
         assert all(isinstance(node, Sequence) for node in tree.nodes)
 
-    def test_mixed_complex_tree(self):
+    def test_mixed_complex_tree(self) -> None:
         """Test complex tree with mixed operators."""
         tree = Sequence(
             [

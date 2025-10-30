@@ -114,6 +114,21 @@ class TestTokenizer:
         assert tokens[1].position == 2  # →
         assert tokens[2].position == 4  # B
 
+    def test_token_repr(self):
+        """Test token __repr__."""
+        from restack_gen.parser import Token, TokenType
+
+        t = Token(TokenType.NAME, "foo", 3)
+        assert str(t) == "Token(NAME, 'foo', pos=3)"
+
+    def test_tokenize_comma(self):
+        """Test tokenizing comma."""
+        from restack_gen.parser import TokenType, tokenize
+
+        tokens = tokenize(",")
+        assert tokens[0].type == TokenType.COMMA
+        assert tokens[0].value == ","
+
 
 class TestParser:
     """Tests for parser."""
@@ -166,7 +181,7 @@ class TestParser:
         assert ir.nodes[1].nodes[1].name == "C"
         assert ir.nodes[2].name == "D"
 
-    def test_parse_parentheses_override_precedence(self):
+    def test_parse_parentheses_override_precedence(self) -> None:
         """Test that parentheses override precedence."""
         # (A → B) ⇄ (C → D) should parse as two sequences in parallel
         ir = parse("(A → B) ⇄ (C → D)")
@@ -179,13 +194,13 @@ class TestParser:
         assert ir.nodes[1].nodes[0].name == "C"
         assert ir.nodes[1].nodes[1].name == "D"
 
-    def test_parse_nested_parentheses(self):
+    def test_parse_nested_parentheses(self) -> None:
         """Test parsing nested parentheses."""
         ir = parse("((A → B) ⇄ C)")
         assert isinstance(ir, Parallel)
         assert isinstance(ir.nodes[0], Sequence)
 
-    def test_parse_complex_expression(self):
+    def test_parse_complex_expression(self) -> None:
         """Test parsing complex expression."""
         # Start → (Worker1 ⇄ Worker2) → Process → End
         ir = parse("Start → (Worker1 ⇄ Worker2) → Process → End")
@@ -196,7 +211,7 @@ class TestParser:
         assert ir.nodes[2].name == "Process"
         assert ir.nodes[3].name == "End"
 
-    def test_parse_empty_expression(self):
+    def test_parse_empty_expression(self) -> None:
         """Test that empty expression raises error."""
         with pytest.raises(ParseError, match="Empty expression"):
             parse("")
@@ -204,43 +219,54 @@ class TestParser:
         with pytest.raises(ParseError, match="Empty expression"):
             parse("   ")
 
-    def test_parse_missing_closing_paren(self):
+    def test_parse_missing_closing_paren(self) -> None:
         """Test error for missing closing parenthesis."""
         with pytest.raises(ParseError, match="Expected RPAREN"):
             parse("(A → B")
 
-    def test_parse_unexpected_closing_paren(self):
+    def test_parse_unexpected_closing_paren(self) -> None:
         """Test error for unexpected closing parenthesis."""
         with pytest.raises(ParseError, match="Unexpected token"):
             parse("A → B)")
 
-    def test_parse_trailing_operator(self):
+    def test_parse_trailing_operator(self) -> None:
         """Test error for trailing operator."""
         with pytest.raises(ParseError, match="Unexpected token"):
             parse("A → B →")
 
-    def test_parse_leading_operator(self):
+    def test_parse_leading_operator(self) -> None:
         """Test error for leading operator."""
         with pytest.raises(ParseError, match="Unexpected token"):
             parse("→ A → B")
 
-    def test_parse_double_operator(self):
+    def test_parse_double_operator(self) -> None:
         """Test error for double operator."""
         with pytest.raises(ParseError, match="Unexpected token"):
             parse("A → → B")
+
+    def test_parse_conditional_with_false_branch(self) -> None:
+        """Test parsing conditional with false branch."""
+        from restack_gen.ir import Conditional
+        from restack_gen.parser import parse
+
+        ir = parse("Cond →? (A, B)")
+        assert isinstance(ir, Conditional)
+        assert ir.condition == "Cond"
+        assert ir.true_branch.name == "A"
+        assert ir.false_branch.name == "B"
 
 
 class TestGetProjectResources:
     """Tests for get_project_resources function."""
 
-    def test_get_resources_outside_project(self, tmp_path, monkeypatch):
+    def test_get_resources_outside_project(self, tmp_path, monkeypatch) -> None:
         """Test error when not in a project."""
         # Create empty temp directory (no pyproject.toml)
         monkeypatch.chdir(tmp_path)
         with pytest.raises(RuntimeError, match="Not in a restack-gen project"):
             get_project_resources()
 
-    def test_get_resources_in_project(self, tmp_path, monkeypatch):
+    def test_get_resources_in_project(self, tmp_path, monkeypatch) -> None:
         """Test getting resources from a project."""
         # Create project structure
         project_name = "testproject"
@@ -287,11 +313,30 @@ class TestGetProjectResources:
         assert "validate_data" in resources
         assert resources["validate_data"] == "function"
 
+    def test_register_early_return(self, tmp_path, monkeypatch) -> None:
+        """Test that register returns early if name is empty (coverage for early return)."""
+        from restack_gen.parser import get_project_resources
+
+        # Create minimal project with agents dir and an empty file name
+        project_root = tmp_path / "testproject"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[tool.poetry]\nname = 'testproject'\n")
+        src_dir = project_root / "src" / "testproject"
+        src_dir.mkdir(parents=True)
+        agents_dir = src_dir / "agents"
+        agents_dir.mkdir()
+        # Create a file with an empty name (simulate edge case)
+        (agents_dir / "__init__.py").write_text("")
+        monkeypatch.chdir(project_root)
+        # Should not raise or add empty name
+        resources = get_project_resources()
+        assert "" not in resources
+
 
 class TestValidateIR:
     """Tests for validate_ir function."""
 
-    def test_validate_outside_project(self, tmp_path, monkeypatch):
+    def test_validate_outside_project(self, tmp_path, monkeypatch) -> None:
         """Test validation fails outside project."""
         # Create empty temp directory (no pyproject.toml)
         monkeypatch.chdir(tmp_path)
@@ -300,7 +345,7 @@ class TestValidateIR:
         assert not valid
         assert "Not in a restack-gen project" in error
 
-    def test_validate_unknown_resource(self, tmp_path, monkeypatch):
+    def test_validate_unknown_resource(self, tmp_path, monkeypatch) -> None:
         """Test validation fails for unknown resource."""
         # Create minimal project
         project_root = tmp_path / "testproject"
@@ -316,7 +361,7 @@ class TestValidateIR:
         assert not valid
         assert "not found in project" in error
 
-    def test_validate_existing_resource(self, tmp_path, monkeypatch):
+    def test_validate_existing_resource(self, tmp_path, monkeypatch) -> None:
         """Test validation succeeds for existing resource."""
         # Create project with one agent
         project_root = tmp_path / "testproject"
@@ -339,7 +384,7 @@ class TestValidateIR:
         # Check that resource type was updated
         assert ir.resource_type == "agent"
 
-    def test_validate_sequence_with_valid_resources(self, tmp_path, monkeypatch):
+    def test_validate_sequence_with_valid_resources(self, tmp_path, monkeypatch) -> None:
         """Test validating sequence with valid resources."""
         # Create project with agent and workflow
         project_root = tmp_path / "testproject"
@@ -371,7 +416,7 @@ class TestValidateIR:
         assert ir.nodes[0].resource_type == "agent"
         assert ir.nodes[1].resource_type == "workflow"
 
-    def test_validate_parallel_with_invalid_resource(self, tmp_path, monkeypatch):
+    def test_validate_parallel_with_invalid_resource(self, tmp_path, monkeypatch) -> None:
         """Test validation fails with one invalid resource in parallel."""
         project_root = tmp_path / "testproject"
         project_root.mkdir()
@@ -397,11 +442,47 @@ class TestValidateIR:
         assert "InvalidAgent" in error
         assert "not found" in error
 
+    def test_resource_type_mismatch_manual(self, tmp_path, monkeypatch) -> None:
+        """Manual: validation fails for resource type mismatch."""
+        from restack_gen.ir import Resource
+        from restack_gen.parser import validate_ir
+
+        # Create minimal project
+        project_root = tmp_path / "testproject"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[tool.poetry]\nname = 'testproject'\n")
+        src_dir = project_root / "src" / "testproject"
+        src_dir.mkdir(parents=True)
+        agents_dir = src_dir / "agents"
+        agents_dir.mkdir()
+        (agents_dir / "foo.py").write_text("class FooAgent: pass")
+        monkeypatch.chdir(project_root)
+
+        # Simulate a type mismatch: resource exists, but type is not 'agent'
+        node = Resource("foo", "agent")
+        node.resource_type = "agent"
+        resources = {"foo": "workflow"}  # foo exists, but is a workflow
+        valid, error = validate_ir(node, resources=resources)
+        print(f"DEBUG: valid={valid}, error={error}")
+        assert not valid
+        assert "not a agent" in error or "not a" in error
+
+    def test_validate_unknown_node_type(self, tmp_path, monkeypatch) -> None:
+        """Test validation fails for unknown node type."""
+        from restack_gen.parser import validate_ir
+
+        class Dummy:
+            pass
+
+        valid, error = validate_ir(Dummy(), {})
+        assert not valid
+        assert "Unknown node type" in error
+
 
 class TestParseAndValidate:
     """Tests for parse_and_validate function."""
 
-    def test_parse_and_validate_success(self, tmp_path, monkeypatch):
+    def test_parse_and_validate_success(self, tmp_path, monkeypatch) -> None:
         """Test successful parse and validate."""
         # Create project with resources
         project_root = tmp_path / "testproject"
@@ -423,12 +504,12 @@ class TestParseAndValidate:
         assert ir.nodes[0].resource_type == "agent"
         assert ir.nodes[1].resource_type == "agent"
 
-    def test_parse_and_validate_parse_error(self):
+    def test_parse_and_validate_parse_error(self) -> None:
         """Test that parse errors are raised."""
         with pytest.raises(ParseError):
             parse_and_validate("Invalid → →")
 
-    def test_parse_and_validate_validation_error(self, tmp_path, monkeypatch):
+    def test_parse_and_validate_validation_error(self, tmp_path, monkeypatch) -> None:
         """Test that validation errors are raised."""
         project_root = tmp_path / "testproject"
         project_root.mkdir()
@@ -446,7 +527,7 @@ class TestParseAndValidate:
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
-    def test_very_long_expression(self):
+    def test_very_long_expression(self) -> None:
         """Test parsing very long expression."""
         # Create expression with 10 nodes
         names = [f"Node{i}" for i in range(10)]
@@ -455,7 +536,7 @@ class TestEdgeCases:
         assert isinstance(ir, Sequence)
         assert len(ir.nodes) == 10
 
-    def test_deeply_nested_parentheses(self):
+    def test_deeply_nested_parentheses(self) -> None:
         """Test deeply nested parentheses."""
         expr = "((((A → B))))"
         ir = parse(expr)
@@ -463,7 +544,7 @@ class TestEdgeCases:
         assert ir.nodes[0].name == "A"
         assert ir.nodes[1].name == "B"
 
-    def test_mixed_operators_complex(self):
+    def test_mixed_operators_complex(self) -> None:
         """Test complex mixed operators."""
         # (A ⇄ B) → (C ⇄ D) → E should create sequence of parallels
         ir = parse("(A ⇄ B) → (C ⇄ D) → E")
@@ -473,7 +554,7 @@ class TestEdgeCases:
         assert isinstance(ir.nodes[1], Parallel)
         assert isinstance(ir.nodes[2], Resource)
 
-    def test_whitespace_variations(self):
+    def test_whitespace_variations(self) -> None:
         """Test various whitespace patterns."""
         expressions = [
             "A→B→C",
@@ -486,3 +567,17 @@ class TestEdgeCases:
             ir = parse(expr)
             assert isinstance(ir, Sequence)
             assert len(ir.nodes) == 3
+
+    def test_parser_error_branches(self) -> None:
+        """Test parser error branches for unexpected token and missing parens."""
+        from restack_gen.parser import ParseError, parse
+
+        # Unexpected token
+        with pytest.raises(ParseError) as excinfo:
+            parse("Agent1 → → Agent2")
+        msg = str(excinfo.value)
+        assert ("Expected" in msg) or ("Unexpected token" in msg)
+        # Missing closing paren
+        with pytest.raises(ParseError) as excinfo:
+            parse("Agent1 →? (Agent2")
+        assert "Expected RPAREN" in str(excinfo.value) or "Expected" in str(excinfo.value)
